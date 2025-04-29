@@ -68,14 +68,16 @@ class CartesianImpedanceExampleController : public controller_interface::Control
 
   // Classic cartesian controller
   double filter_params_{0.005};
-  double nullspace_stiffness_{20.0};
-  double nullspace_stiffness_target_{20.0};
   const double delta_tau_max_{1.0};
 
   Eigen::Matrix<double, 6, 6> cartesian_stiffness_;
   Eigen::Matrix<double, 6, 6> cartesian_stiffness_target_;
   Eigen::Matrix<double, 6, 6> cartesian_damping_;
   Eigen::Matrix<double, 6, 6> cartesian_damping_target_;
+  double nullspace_stiffness_{20.0};
+  double nullspace_stiffness_target_{20.0};
+  double translational_clip_{0.05};
+  double rotational_clip_{0.1};
   Eigen::Matrix<double, 7, 1> q_d_nullspace_;
   Eigen::Vector3d position_d_;
   Eigen::Quaterniond orientation_d_;
@@ -86,6 +88,13 @@ class CartesianImpedanceExampleController : public controller_interface::Control
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_equilibrium_pose_;
 
   void equilibriumPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
+
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_handle_;
+  rcl_interfaces::msg::SetParametersResult param_callback(
+      const std::vector<rclcpp::Parameter> &parameters);
+  void declare_double_parameter(
+      const std::string &name, const std::string &description,
+      double default_value, double from_value, double to_value);
 };
 
 }  // namespace franka_example_controllers

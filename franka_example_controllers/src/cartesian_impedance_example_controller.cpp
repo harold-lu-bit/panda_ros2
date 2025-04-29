@@ -23,7 +23,9 @@ CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleCon
 
   // Compliance parameters
   const double translational_stiffness{150.0};
+  const double translational_damping{25.0};
   const double rotational_stiffness{10.0};
+  const double rotational_damping{5.0};
   cartesian_stiffness_.setZero();
   cartesian_stiffness_.topLeftCorner(3, 3)
       << translational_stiffness * Eigen::MatrixXd::Identity(3, 3);
@@ -31,9 +33,35 @@ CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleCon
       << rotational_stiffness * Eigen::MatrixXd::Identity(3, 3);
   cartesian_damping_.setZero();
   cartesian_damping_.topLeftCorner(3, 3)
-      << 2.0 * sqrt(translational_stiffness) * Eigen::MatrixXd::Identity(3, 3);
+      << translational_damping * Eigen::MatrixXd::Identity(3, 3);
   cartesian_damping_.bottomRightCorner(3, 3)
-      << 2.0 * sqrt(rotational_stiffness) * Eigen::MatrixXd::Identity(3, 3);
+      << rotational_damping * Eigen::MatrixXd::Identity(3, 3);
+  cartesian_stiffness_target_ = cartesian_stiffness_;
+  cartesian_damping_target_ = cartesian_damping_;
+  declare_double_parameter(
+      "translational_stiffness", "Cartesian translational stiffness",
+      translational_stiffness, 0.0, 2000.0);
+  declare_double_parameter(
+      "translational_damping", "Cartesian translational damping",
+      translational_damping, 0.0, 200.0);
+  declare_double_parameter(
+      "rotational_stiffness", "Cartesian rotational stiffness",
+      rotational_stiffness, 0.0, 300.0);
+  declare_double_parameter(
+      "rotational_damping", "Cartesian rotational damping",
+      rotational_damping, 0.0, 30.0);
+  declare_double_parameter(
+      "nullspace_stiffness", "Nullspace stiffness",
+      nullspace_stiffness_, 0.0, 50.0);
+  declare_double_parameter(
+      "translational_clip", "Cartesian translational error clip",
+      translational_clip_, 0.0, 0.1);
+  declare_double_parameter(
+      "rotational_clip", "Cartesian rotational error clip",
+      rotational_clip_, 0.0, 0.1);
+  param_handle_ = get_node()->add_on_set_parameters_callback(
+      std::bind(&CartesianImpedanceExampleController::param_callback, this, std::placeholders::_1));
+
   return CallbackReturn::SUCCESS;
 }
 
@@ -135,17 +163,22 @@ controller_interface::return_type CartesianImpedanceExampleController::update(
   // position error
   Eigen::Matrix<double, 6, 1> position_error;
   position_error.head(3) << position - position_d_;
+  // clip position error
+  position_error.head(3) << position_error.head(3).cwiseMax(-translational_clip_);
+  position_error.head(3) << position_error.head(3).cwiseMin(translational_clip_);
 
   // orientation error
   if (orientation_d_.coeffs().dot(orientation.coeffs()) < 0.0) {
     orientation.coeffs() << -orientation.coeffs();
   }
-
   // "difference" quaternion
   Eigen::Quaterniond error_quaternion(orientation.inverse() * orientation_d_);
   position_error.tail(3) << error_quaternion.x(), error_quaternion.y(), error_quaternion.z();
   // Transform to base frame
   position_error.tail(3) << -transform.rotation() * position_error.tail(3);
+  // clip orientation error
+  position_error.tail(3) << position_error.tail(3).cwiseMax(-rotational_clip_);
+  position_error.tail(3) << position_error.tail(3).cwiseMin(rotational_clip_);
 
   // compute control
   // allocate variables
@@ -176,12 +209,12 @@ controller_interface::return_type CartesianImpedanceExampleController::update(
 
   // update parameters changed online either through dynamic reconfigure or through the interactive
   // target by filtering
-  // cartesian_stiffness_ =
-  //     filter_params_ * cartesian_stiffness_target_ + (1.0 - filter_params_) * cartesian_stiffness_;
-  // cartesian_damping_ =
-  //     filter_params_ * cartesian_damping_target_ + (1.0 - filter_params_) * cartesian_damping_;
-  // nullspace_stiffness_ =
-  //     filter_params_ * nullspace_stiffness_target_ + (1.0 - filter_params_) * nullspace_stiffness_;
+  cartesian_stiffness_ =
+      filter_params_ * cartesian_stiffness_target_ + (1.0 - filter_params_) * cartesian_stiffness_;
+  cartesian_damping_ =
+      filter_params_ * cartesian_damping_target_ + (1.0 - filter_params_) * cartesian_damping_;
+  nullspace_stiffness_ =
+      filter_params_ * nullspace_stiffness_target_ + (1.0 - filter_params_) * nullspace_stiffness_;
 
   std::lock_guard<std::mutex> position_d_target_mutex_lock(
       position_and_orientation_d_target_mutex_);
@@ -226,6 +259,52 @@ Eigen::Matrix<double, 7, 1> CartesianImpedanceExampleController::saturateTorqueR
         tau_j_d[i] + std::max(std::min(difference, delta_tau_max_), -delta_tau_max_);
   }
   return tau_d_saturated;
+}
+
+void CartesianImpedanceExampleController::declare_double_parameter(
+    const std::string &name, const std::string &description,
+    double default_value, double from_value, double to_value)
+{
+  auto parameter_descriptor = rcl_interfaces::msg::ParameterDescriptor();
+  auto range = rcl_interfaces::msg::FloatingPointRange();
+  range.from_value = from_value;
+  range.to_value = to_value;
+  parameter_descriptor.floating_point_range.emplace_back(range);
+  parameter_descriptor.description = description;
+  get_node()->declare_parameter<double>(name, default_value, parameter_descriptor);
+}
+
+rcl_interfaces::msg::SetParametersResult CartesianImpedanceExampleController::param_callback(
+    const std::vector<rclcpp::Parameter> &parameters)
+{
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = true;
+  for (const auto &param : parameters)
+  {
+    if (param.get_name() == "translational_stiffness") {
+      cartesian_stiffness_target_.topLeftCorner(3, 3)
+          << param.as_double() * Eigen::Matrix3d::Identity();
+    } else if (param.get_name() == "translational_damping") {
+      cartesian_damping_target_.topLeftCorner(3, 3)
+          << param.as_double() * Eigen::Matrix3d::Identity();
+    } else if (param.get_name() == "rotational_stiffness") {
+      cartesian_stiffness_target_.bottomRightCorner(3, 3)
+          << param.as_double() * Eigen::Matrix3d::Identity();
+    } else if (param.get_name() == "rotational_damping") {
+      cartesian_damping_target_.bottomRightCorner(3, 3)
+          << param.as_double() * Eigen::Matrix3d::Identity();
+    } else if (param.get_name() == "nullspace_stiffness") {
+      nullspace_stiffness_target_ = param.as_double();
+    } else if (param.get_name() == "translational_clip") {
+      translational_clip_ = param.as_double();
+    } else if (param.get_name() == "rotational_clip") {
+      rotational_clip_ = param.as_double();
+    } else {
+      result.successful = false;
+      result.reason = "Parameter set behavior not defined";
+    }
+  }
+  return result;
 }
 }  // namespace franka_example_controllers
 

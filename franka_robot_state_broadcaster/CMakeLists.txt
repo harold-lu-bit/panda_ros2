@@ -25,7 +25,8 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
     rclcpp_lifecycle
     rcutils
     realtime_tools
-    sensor_msgs)
+    sensor_msgs
+    geometry_msgs)
 
 
 # find dependencies

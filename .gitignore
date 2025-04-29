@@ -7,3 +7,5 @@ cmake-build-*/
 build/
 install/
 log/
+docker/.vscode-server/
+*.env

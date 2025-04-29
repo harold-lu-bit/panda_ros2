@@ -11,6 +11,18 @@
             The joint impedance example controller moves joint 4 and 5 in a very compliant periodic movement.
         </description>
     </class>
+    <class name="franka_example_controllers/JointPositionExampleController"
+           type="franka_example_controllers::JointPositionExampleController" base_class_type="controller_interface::ControllerInterface">
+        <description>
+            The joint position example controller moves in a periodic movement.
+        </description>
+    </class>
+    <class name="franka_example_controllers/CartesianPoseExampleController"
+           type="franka_example_controllers::CartesianPoseExampleController" base_class_type="controller_interface::ControllerInterface">
+        <description>
+            The cartesian pose example controller commands to translation on x and z components.
+        </description>
+    </class>
     <class name="franka_example_controllers/MoveToStartExampleController"
            type="franka_example_controllers::MoveToStartExampleController" base_class_type="controller_interface::ControllerInterface">
         <description>
@@ -21,6 +33,12 @@
            type="franka_example_controllers::ModelExampleController" base_class_type="controller_interface::ControllerInterface">
         <description>
             The franka model example controller evaluates and prints the dynamic model of Franka Emika Robots.
+        </description>
+    </class>
+    <class name="franka_example_controllers/CartesianImpedanceExampleController" 
+           type="franka_example_controllers::CartesianImpedanceExampleController" base_class_type="controller_interface::ControllerInterface">
+        <description>
+        A controller that renders a spring damper system in cartesian space. Compliance parameters and the equilibrium pose can be modified online with dynamic reconfigure and an interactive marker respectively.
         </description>
     </class>
 </library>

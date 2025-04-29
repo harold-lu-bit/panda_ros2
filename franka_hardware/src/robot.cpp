@@ -101,4 +101,9 @@ Robot::~Robot() {
 bool Robot::isStopped() const {
   return stopped_;
 }
+
+void Robot::automaticErrorRecovery() {
+  robot_->automaticErrorRecovery();
+}
+
 }  // namespace franka_hardware

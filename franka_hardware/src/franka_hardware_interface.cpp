@@ -169,6 +169,9 @@ CallbackReturn FrankaHardwareInterface::on_init(const hardware_interface::Hardwa
     }
     RCLCPP_INFO(getLogger(), "Successfully connected to robot");
   }
+  executor_ = std::make_shared<FrankaExecutor>();
+  action_node_ = std::make_shared<ActionServer>(rclcpp::NodeOptions(), robot_);
+  executor_->add_node(action_node_);
   return CallbackReturn::SUCCESS;
 }
 

@@ -81,6 +81,14 @@ class Robot {
    */
   virtual void write(const std::array<double, 7>& efforts);
 
+  /**
+   * Starts an automatic recovery process.
+   *
+   * @throw CommandException if the Control reports an error.
+   * @throw NetworkException if the connection is lost, e.g. after a timeout.
+   */
+  virtual void automaticErrorRecovery();
+
   /// @return true if there is no control or reading loop running.
   [[nodiscard]] virtual bool isStopped() const;
 

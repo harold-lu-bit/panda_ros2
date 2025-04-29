@@ -31,6 +31,7 @@ add_library(
         SHARED
         src/gravity_compensation_example_controller.cpp
         src/joint_impedance_example_controller.cpp
+        src/cartesian_impedance_example_controller.cpp
         src/model_example_controller.cpp
         src/move_to_start_example_controller.cpp
         src/motion_generator.cpp)
@@ -98,12 +99,19 @@ if(BUILD_TESTING)
         test/test_load_gravity_compensation_controller.cpp
     )
     target_include_directories(${PROJECT_NAME}_test PRIVATE include)
-    ament_target_dependencies(${PROJECT_NAME}_test controller_manager)
+    ament_target_dependencies(${PROJECT_NAME}_test
+        controller_manager
+        ros2_control_test_assets
+    )
 
     ament_add_gmock(${PROJECT_NAME}_test_load_move_to_start
         test/test_load_move_to_start_example_controller.cpp)
     target_include_directories(${PROJECT_NAME}_test_load_move_to_start PRIVATE include)
-    ament_target_dependencies(${PROJECT_NAME}_test_load_move_to_start controller_manager)
+    ament_target_dependencies(${PROJECT_NAME}_test_load_move_to_start
+        controller_manager
+        ros2_control_test_assets
+    )
+
 
     ament_add_gmock(${PROJECT_NAME}_gravity_test test/test_gravity_compensation_example.cpp)
     target_include_directories(${PROJECT_NAME}_gravity_test PRIVATE include)

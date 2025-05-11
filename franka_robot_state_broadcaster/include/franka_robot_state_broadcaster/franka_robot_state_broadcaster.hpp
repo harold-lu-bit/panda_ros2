@@ -65,8 +65,8 @@ class FrankaRobotStateBroadcaster : public controller_interface::ControllerInter
   std::string arm_id{"panda"};
   std::string state_interface_name{"robot_state"};
   std::shared_ptr<rclcpp::Publisher<franka_msgs::msg::FrankaRobotState>> franka_state_publisher;
-  const std::string k_end_effector_frame_{"panda_link7"};
-  const std::string k_stiffness_frame_{"panda_link7"};
+  const std::string k_end_effector_ref_frame_{"panda_link0"};
+  const std::string k_stiffness_frame_{"panda_hand_tcp"};
   
   // override RealtimePublisher to customize the trylock behavior
   class FrankaRobotStateRealtimePublisher

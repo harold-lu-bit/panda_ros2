@@ -11,6 +11,7 @@ services:
         - USER_UID=${USER_UID:?error}
         - USER_GID=${USER_GID:?error}
         - USERNAME=${USERNAME:?error}
+        - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:?error}
     container_name: panda_ros2
     network_mode: "host"
     privileged: true
@@ -28,6 +29,7 @@ services:
       QT_X11_NO_MITSHM: 1
       DISPLAY: $DISPLAY
       TERM: xterm-256color
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:?error}
     cap_add:
       - SYS_NICE
     ulimits:

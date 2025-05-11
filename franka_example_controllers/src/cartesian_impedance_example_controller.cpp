@@ -22,10 +22,10 @@ CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleCon
   orientation_d_target_.coeffs() << 0.0, 0.0, 0.0, 1.0;
 
   // Compliance parameters
-  const double translational_stiffness{150.0};
-  const double translational_damping{25.0};
-  const double rotational_stiffness{10.0};
-  const double rotational_damping{5.0};
+  const double translational_stiffness{500.0};
+  const double translational_damping{100.0};
+  const double rotational_stiffness{60.0};
+  const double rotational_damping{6.0};
   cartesian_stiffness_.setZero();
   cartesian_stiffness_.topLeftCorner(3, 3)
       << translational_stiffness * Eigen::MatrixXd::Identity(3, 3);
@@ -40,13 +40,13 @@ CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleCon
   cartesian_damping_target_ = cartesian_damping_;
   declare_double_parameter(
       "translational_stiffness", "Cartesian translational stiffness",
-      translational_stiffness, 0.0, 2000.0);
+      translational_stiffness, 0.0, 800.0);
   declare_double_parameter(
       "translational_damping", "Cartesian translational damping",
       translational_damping, 0.0, 200.0);
   declare_double_parameter(
       "rotational_stiffness", "Cartesian rotational stiffness",
-      rotational_stiffness, 0.0, 300.0);
+      rotational_stiffness, 0.0, 150.0);
   declare_double_parameter(
       "rotational_damping", "Cartesian rotational damping",
       rotational_damping, 0.0, 30.0);
@@ -58,7 +58,7 @@ CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleCon
       translational_clip_, 0.0, 0.1);
   declare_double_parameter(
       "rotational_clip", "Cartesian rotational error clip",
-      rotational_clip_, 0.0, 0.1);
+      rotational_clip_, 0.0, 0.15);
   param_handle_ = get_node()->add_on_set_parameters_callback(
       std::bind(&CartesianImpedanceExampleController::param_callback, this, std::placeholders::_1));
 

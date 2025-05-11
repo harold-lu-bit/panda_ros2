@@ -142,12 +142,12 @@ controller_interface::return_type FrankaRobotStateBroadcaster::update(
   realtime_franka_state_publisher->unlockAndPublish();
   const auto& franka_state_msg = realtime_franka_state_publisher->msg_;
 
-  const Eigen::Map<const Eigen::Matrix4d> transformation_matrix(franka_state_msg.o_t_ee_c.data());
+  const Eigen::Map<const Eigen::Matrix4d> transformation_matrix(franka_state_msg.o_t_ee.data());
   const Eigen::Quaterniond quaternion(transformation_matrix.topLeftCorner<3, 3>());
   const Eigen::Translation3d translation(transformation_matrix.block<3, 1>(0, 3));
   geometry_msgs::msg::PoseStamped current_pose_stamped;
   current_pose_stamped.header.stamp = time;
-  current_pose_stamped.header.frame_id = k_end_effector_frame_;
+  current_pose_stamped.header.frame_id = k_end_effector_ref_frame_;
   current_pose_stamped.pose.position = geometry_msgs::build<geometry_msgs::msg::Point>()
     .x(translation.x())
     .y(translation.y())

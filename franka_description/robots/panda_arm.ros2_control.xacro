@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <xacro:macro name="panda_arm_ros2_control" params="ns robot_ip use_fake_hardware:=^|false fake_sensor_commands:=^|false">
+  <xacro:macro name="panda_arm_ros2_control" params="ns arm_id robot_ip use_fake_hardware:=^|false fake_sensor_commands:=^|false">
     <ros2_control name="FrankaHardwareInterface" type="system">
       <hardware>
         <xacro:if value="${use_fake_hardware}">
@@ -11,6 +11,7 @@
         </xacro:if>
         <xacro:unless value="${use_fake_hardware}">
           <plugin>franka_hardware/FrankaHardwareInterface</plugin>
+          <param name="arm_id">${arm_id}</param>
           <param name="robot_ip">${robot_ip}</param>
         </xacro:unless>
       </hardware>

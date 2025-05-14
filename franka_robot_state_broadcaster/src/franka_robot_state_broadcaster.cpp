@@ -83,9 +83,13 @@ FrankaRobotStateBroadcaster::state_interface_configuration() const {
 controller_interface::CallbackReturn FrankaRobotStateBroadcaster::on_configure(
     const rclcpp_lifecycle::State& /*previous_state*/) {
   params = param_listener->get_params();
-
+  std::string robot_description;
+  if (!get_node()->get_parameter("robot_description", robot_description)) {
+    RCLCPP_ERROR(get_node()->get_logger(), "Failed to get robot_description parameter");
+    return CallbackReturn::ERROR;
+  }
   franka_robot_state_ = std::make_unique<franka_semantic_components::FrankaRobotState>(
-      franka_semantic_components::FrankaRobotState(params.arm_id + "/" + state_interface_name));
+      franka_semantic_components::FrankaRobotState(params.arm_id + "/" + state_interface_name, robot_description));
 
   current_pose_stamped_publisher_ = get_node()->create_publisher<geometry_msgs::msg::PoseStamped>(
       kCurrentPoseTopic, rclcpp::SystemDefaultsQoS());
@@ -147,7 +151,7 @@ controller_interface::return_type FrankaRobotStateBroadcaster::update(
   const Eigen::Translation3d translation(transformation_matrix.block<3, 1>(0, 3));
   geometry_msgs::msg::PoseStamped current_pose_stamped;
   current_pose_stamped.header.stamp = time;
-  current_pose_stamped.header.frame_id = k_end_effector_ref_frame_;
+  current_pose_stamped.header.frame_id = franka_robot_state_->get_base_frame_name();
   current_pose_stamped.pose.position = geometry_msgs::build<geometry_msgs::msg::Point>()
     .x(translation.x())
     .y(translation.y())
@@ -161,7 +165,7 @@ controller_interface::return_type FrankaRobotStateBroadcaster::update(
 
   geometry_msgs::msg::WrenchStamped wrench_in_stiffness_frame;
   wrench_in_stiffness_frame.header.stamp = time;
-  wrench_in_stiffness_frame.header.frame_id = k_stiffness_frame_;
+  wrench_in_stiffness_frame.header.frame_id = franka_robot_state_->get_stiffness_frame_name();
   wrench_in_stiffness_frame.wrench.force = geometry_msgs::build<geometry_msgs::msg::Vector3>()
     .x(franka_state_msg.k_f_ext_hat_k.at(0))
     .y(franka_state_msg.k_f_ext_hat_k.at(1))

@@ -41,6 +41,8 @@ namespace franka_semantic_components {
 FrankaRobotModel::FrankaRobotModel(const std::string& franka_model_interface_name,
                                    const std::string& franka_state_interface_name)
     : SemanticComponentInterface(franka_model_interface_name, 2) {
+  franka_model_interface_name_ = franka_model_interface_name;
+  franka_state_interface_name_ = franka_state_interface_name;
   interface_names_.emplace_back(franka_model_interface_name);
   interface_names_.emplace_back(franka_state_interface_name);
 }
@@ -48,12 +50,12 @@ FrankaRobotModel::FrankaRobotModel(const std::string& franka_model_interface_nam
 void FrankaRobotModel::initialize() {
   auto franka_state_interface =
       std::find_if(state_interfaces_.begin(), state_interfaces_.end(), [&](const auto& interface) {
-        return interface.get().get_name() == arm_id_ + "/" + robot_state_interface_name_;
+        return interface.get().get_name() == franka_state_interface_name_;
       });
 
   auto franka_model_interface =
       std::find_if(state_interfaces_.begin(), state_interfaces_.end(), [&](const auto& interface) {
-        return interface.get().get_name() == arm_id_ + "/" + robot_model_interface_name_;
+        return interface.get().get_name() == franka_model_interface_name_;
       });
 
   if (franka_state_interface != state_interfaces_.end() &&
@@ -62,8 +64,9 @@ void FrankaRobotModel::initialize() {
     robot_state = bit_cast<franka::RobotState*>((*franka_state_interface).get().get_value());
   } else {
     RCLCPP_ERROR(rclcpp::get_logger("franka_model_semantic_component"),
-                 "Franka interface does not exist! Did you assign the loaned state in the "
-                 "controller?");
+                 "Franka interface does not %s/%s exist! Did you assign the loaned state in the "
+                 "controller?", 
+                 franka_model_interface_name_.c_str(), franka_state_interface_name_.c_str());
     throw std::runtime_error("Franka state interfaces does not exist");
   }
   initialized = true;

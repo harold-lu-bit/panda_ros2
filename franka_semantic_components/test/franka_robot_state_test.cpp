@@ -32,6 +32,7 @@ void FrankaRobotStateTest::SetUp() {
 
   robot_state.q = joint_angles;
   robot_state.q_d = joint_velocities;
+  robot_state.O_T_EE = end_effector_pose;
   robot_state.robot_mode = robot_mode;
 
   hardware_interface::StateInterface franka_hw_state{

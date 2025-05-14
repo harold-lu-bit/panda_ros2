@@ -24,10 +24,12 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     robot_ip_parameter_name = 'robot_ip'
+    namespace_parameter_name = 'namespace'
     use_fake_hardware_parameter_name = 'use_fake_hardware'
     arm_parameter_name = 'arm_id'
     joint_names_parameter_name = 'joint_names'
     robot_ip = LaunchConfiguration(robot_ip_parameter_name)
+    namespace = LaunchConfiguration(namespace_parameter_name)
     use_fake_hardware = LaunchConfiguration(use_fake_hardware_parameter_name)
     arm_id = LaunchConfiguration(arm_parameter_name)
     joint_names = LaunchConfiguration(joint_names_parameter_name)
@@ -55,6 +57,11 @@ def generate_launch_description():
                 robot_ip_parameter_name, description='Hostname or IP address of the robot.'
             ),
             DeclareLaunchArgument(
+                namespace_parameter_name,
+                default_value='',
+                description='Namespace for the gripper.',
+            ),
+            DeclareLaunchArgument(
                 use_fake_hardware_parameter_name,
                 default_value='false',
                 description=(
@@ -77,14 +84,16 @@ def generate_launch_description():
             Node(
                 package='franka_gripper',
                 executable='franka_gripper_node',
-                name=[arm_id, '_gripper'],
+                namespace=namespace,
+                name=['panda_gripper'],
                 parameters=[{'robot_ip': robot_ip, 'joint_names': joint_names}, gripper_config],
                 condition=UnlessCondition(use_fake_hardware),
             ),
             Node(
                 package='franka_gripper',
                 executable='fake_gripper_state_publisher.py',
-                name=[arm_id, '_gripper'],
+                namespace=namespace,
+                name=['panda_gripper'],
                 parameters=[{'robot_ip': robot_ip, 'joint_names': joint_names}, gripper_config],
                 condition=IfCondition(use_fake_hardware),
             ),

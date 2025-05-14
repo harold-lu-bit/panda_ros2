@@ -15,9 +15,14 @@
 #include "franka_semantic_components/franka_robot_state.hpp"
 
 #include <cstring>
+#include <stack>
 
 #include "rclcpp/logging.hpp"
 namespace {
+
+const size_t kBaseLinkIndex = 0;
+const size_t kFlangeLinkIndex = 8;
+const std::string kTCPFrameName = "_hand_tcp";
 
 // Example implementation of bit_cast: https://en.cppreference.com/w/cpp/numeric/bit_cast
 template <class To, class From>
@@ -32,6 +37,11 @@ bit_cast(const From& src) noexcept {
   To dst;
   std::memcpy(&dst, &src, sizeof(To));
   return dst;
+}
+
+bool endsWith(const std::string& str, const std::string& suffix) {
+    return str.size() >= suffix.size() && 
+           str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
 franka_msgs::msg::Errors errorsToMessage(const franka::Errors& error) {
@@ -144,9 +154,91 @@ franka_msgs::msg::Errors errorsToMessage(const franka::Errors& error) {
 
 namespace franka_semantic_components {
 
-FrankaRobotState::FrankaRobotState(const std::string& name) : SemanticComponentInterface(name, 1) {
-  interface_names_.emplace_back(name_);
-  // TODO: Set default values to NaN
+FrankaRobotState::FrankaRobotState(const std::string& name, const std::string& robot_description)
+    : SemanticComponentInterface(name, 1), model_(std::make_shared<urdf::Model>()) {
+  robot_description_ = robot_description;
+  if (!model_->initString(robot_description_)) {
+    throw std::runtime_error("Failed to parse URDF.");
+  }
+
+  set_links_from_urdf();
+  set_joints_from_urdf();
+
+  robot_name_ = get_robot_name_from_urdf();
+  interface_names_.emplace_back(robot_name_ + "/" + state_interface_name_);
+
+  gripper_loaded_ = is_gripper_loaded();
+  if (gripper_loaded_) {
+    kEndEffectorLinkIndex = get_link_index(robot_name_ + kTCPFrameName);
+  } else {
+    kEndEffectorLinkIndex = kFlangeLinkIndex;
+  }
+  kStiffnessLinkIndex = kEndEffectorLinkIndex;
+}
+
+auto FrankaRobotState::get_link_index(const std::string& link_name) -> size_t {
+  auto link_index = std::find(link_names_.cbegin(), link_names_.cend(), link_name);
+  if (link_index != link_names_.end()) {
+    return std::distance(link_names_.cbegin(), link_index);
+  } else {
+    throw std::runtime_error("Link name not found in URDF.");
+  }
+}
+
+auto FrankaRobotState::is_gripper_loaded() -> bool {
+  const auto& links = model_->links_;
+  bool gripper_loaded = links.find(robot_name_ + kTCPFrameName) != links.end();
+
+  return gripper_loaded;
+}
+
+auto FrankaRobotState::get_robot_name_from_urdf() -> std::string {
+  const std::string suffix = "_link0";
+  for (const auto& pair : model_->links_) {
+    if (endsWith(pair.first, suffix)) {
+      return pair.first.substr(0, pair.first.size() - suffix.size());;
+    }
+  }
+  RCLCPP_ERROR(rclcpp::get_logger("franka_state_semantic_component"),
+                "URDF string dose not contain any link with the suffix %s. "
+                "Use default robot name %s instead. "
+                "Did you assign the right URDF string?",
+                suffix.c_str(), model_->name_.c_str());
+  return model_->name_;
+}
+
+void FrankaRobotState::set_child_links(const std::shared_ptr<const urdf::Link>& link) {
+  // Create a stack and push the root node
+  std::stack<std::shared_ptr<const urdf::Link>> stack;
+  stack.push(link);
+
+  // Iterate while the stack is not empty
+  while (!stack.empty()) {
+    // Pop a link from the stack and add its name to link_names_
+    std::shared_ptr<const urdf::Link> current_link = stack.top();
+    stack.pop();
+    link_names_.push_back(current_link->name);
+
+    // Push the children of the current link to the stack
+    for (const auto& child_link : current_link->child_links) {
+      stack.push(child_link);
+    }
+  }
+}
+
+auto FrankaRobotState::set_links_from_urdf() -> void {
+  auto root_link = model_->getRoot();
+  link_names_.push_back(root_link->name);
+  set_child_links(root_link);
+}
+
+auto FrankaRobotState::set_joints_from_urdf() -> void {
+  auto& joints = model_->joints_;
+  for (const auto& [name, joint] : joints) {
+    if (joint->type == urdf::Joint::REVOLUTE) {
+      joint_names.push_back(name);
+    }
+  }
 }
 
 bool FrankaRobotState::get_values_as_message(franka_msgs::msg::FrankaRobotState& message) {
@@ -315,6 +407,14 @@ bool FrankaRobotState::get_values_as_message(franka_msgs::msg::FrankaRobotState&
       break;
   }
   return true;
+}
+
+auto FrankaRobotState::get_base_frame_name() const -> std::string {
+  return link_names_[kBaseLinkIndex];
+}
+
+auto FrankaRobotState::get_stiffness_frame_name() const -> std::string {
+  return link_names_[kStiffnessLinkIndex];
 }
 
 }  // namespace franka_semantic_components

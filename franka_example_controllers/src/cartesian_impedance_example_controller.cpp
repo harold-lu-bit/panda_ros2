@@ -6,6 +6,13 @@ namespace franka_example_controllers {
 CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleController::on_init() {
   try {
     auto_declare<std::string>("arm_id", "panda");
+    auto_declare<double>("translational_stiffness", 500.0);
+    auto_declare<double>("translational_damping", 100.0);
+    auto_declare<double>("rotational_stiffness", 60.0);
+    auto_declare<double>("rotational_damping", 6.0);
+    auto_declare<double>("nullspace_stiffness", 20.0);
+    auto_declare<double>("translational_clip", 0.06);
+    auto_declare<double>("rotational_clip", 0.1);
   } catch (const std::exception& e) {
     fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
     return CallbackReturn::ERROR;
@@ -21,11 +28,30 @@ CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleCon
   position_d_target_.setZero();
   orientation_d_target_.coeffs() << 0.0, 0.0, 0.0, 1.0;
 
-  // Compliance parameters
-  const double translational_stiffness{500.0};
-  const double translational_damping{100.0};
-  const double rotational_stiffness{60.0};
-  const double rotational_damping{6.0};
+  // Retrieve parameters and clip them
+  const double max_translational_stiffness = 800.0;
+  const double max_translational_damping = 200.0;
+  const double max_rotational_stiffness = 150.0;
+  const double max_rotational_damping = 30.0;
+  const double max_nullspace_stiffness = 50.0;
+  const double max_translational_clip = 0.1;
+  const double max_rotational_clip = 0.15;
+  auto translational_stiffness = get_node()->get_parameter("translational_stiffness").as_double();
+  translational_stiffness = std::clamp(translational_stiffness, 0.0, max_translational_stiffness);
+  auto translational_damping = get_node()->get_parameter("translational_damping").as_double();
+  translational_damping = std::clamp(translational_damping, 0.0, max_translational_damping);
+  auto rotational_stiffness = get_node()->get_parameter("rotational_stiffness").as_double();
+  rotational_stiffness = std::clamp(rotational_stiffness, 0.0, max_rotational_stiffness);
+  auto rotational_damping = get_node()->get_parameter("rotational_damping").as_double();
+  rotational_damping = std::clamp(rotational_damping, 0.0, max_rotational_damping);
+  nullspace_stiffness_ = get_node()->get_parameter("nullspace_stiffness").as_double();
+  nullspace_stiffness_ = std::clamp(nullspace_stiffness_, 0.0, max_nullspace_stiffness);
+  nullspace_stiffness_target_ = nullspace_stiffness_;
+  translational_clip_ = get_node()->get_parameter("translational_clip").as_double();
+  translational_clip_ = std::clamp(translational_clip_, 0.0, max_translational_clip);
+  rotational_clip_ = get_node()->get_parameter("rotational_clip").as_double();
+  rotational_clip_ = std::clamp(rotational_clip_, 0.0, max_rotational_clip);
+
   cartesian_stiffness_.setZero();
   cartesian_stiffness_.topLeftCorner(3, 3)
       << translational_stiffness * Eigen::MatrixXd::Identity(3, 3);
@@ -40,25 +66,25 @@ CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleCon
   cartesian_damping_target_ = cartesian_damping_;
   declare_double_parameter(
       "translational_stiffness", "Cartesian translational stiffness",
-      translational_stiffness, 0.0, 800.0);
+      translational_stiffness, 0.0, max_translational_stiffness);
   declare_double_parameter(
       "translational_damping", "Cartesian translational damping",
-      translational_damping, 0.0, 200.0);
+      translational_damping, 0.0, max_translational_damping);
   declare_double_parameter(
       "rotational_stiffness", "Cartesian rotational stiffness",
-      rotational_stiffness, 0.0, 150.0);
+      rotational_stiffness, 0.0, max_rotational_stiffness);
   declare_double_parameter(
       "rotational_damping", "Cartesian rotational damping",
-      rotational_damping, 0.0, 30.0);
+      rotational_damping, 0.0, max_rotational_damping);
   declare_double_parameter(
       "nullspace_stiffness", "Nullspace stiffness",
-      nullspace_stiffness_, 0.0, 50.0);
+      nullspace_stiffness_, 0.0, max_nullspace_stiffness);
   declare_double_parameter(
       "translational_clip", "Cartesian translational error clip",
-      translational_clip_, 0.0, 0.1);
+      translational_clip_, 0.0, max_translational_clip);
   declare_double_parameter(
       "rotational_clip", "Cartesian rotational error clip",
-      rotational_clip_, 0.0, 0.15);
+      rotational_clip_, 0.0, max_rotational_clip);
   param_handle_ = get_node()->add_on_set_parameters_callback(
       std::bind(&CartesianImpedanceExampleController::param_callback, this, std::placeholders::_1));
 
@@ -100,7 +126,7 @@ CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleCon
   arm_id_ = get_node()->get_parameter("arm_id").as_string();
   auto robot_description = get_node()->get_parameter("robot_description").as_string();
   franka_robot_state_ = std::make_unique<franka_semantic_components::FrankaRobotState>(
-      franka_semantic_components::FrankaRobotState(arm_id_ + "/" + k_robot_state_interface_name));
+      franka_semantic_components::FrankaRobotState(arm_id_ + "/" + k_robot_state_interface_name, robot_description));
   franka_robot_model_ = std::make_unique<franka_semantic_components::FrankaRobotModel>(
       franka_semantic_components::FrankaRobotModel(arm_id_ + "/" + k_robot_model_interface_name,
                                                    arm_id_ + "/" + k_robot_state_interface_name));
@@ -271,6 +297,9 @@ void CartesianImpedanceExampleController::declare_double_parameter(
   range.to_value = to_value;
   parameter_descriptor.floating_point_range.emplace_back(range);
   parameter_descriptor.description = description;
+  if (get_node()->has_parameter(name)) {
+    get_node()->undeclare_parameter(name);
+  }
   get_node()->declare_parameter<double>(name, default_value, parameter_descriptor);
 }
 

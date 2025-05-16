@@ -5,7 +5,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
@@ -18,7 +18,7 @@ def generate_launch_description():
     load_gripper_parameter_name = "load_gripper"
     use_fake_hardware_parameter_name = "use_fake_hardware"
     fake_sensor_commands_parameter_name = "fake_sensor_commands"
-    use_rviz_parameter_name = "use_rviz"
+    use_rviz_parameter_name = "use_dual_rviz"
 
     left_arm_id = LaunchConfiguration(left_arm_id_parameter_name)
     right_arm_id = LaunchConfiguration(right_arm_id_parameter_name)
@@ -34,8 +34,8 @@ def generate_launch_description():
         / "rviz"
         / "dual_franka.rviz"
     )
-    extrinsics_path = Path(
-        get_package_share_directory("franka_bringup")
+    extrinsics_path = (
+        Path(get_package_share_directory("franka_bringup"))
         / "config"
         / "dual_arm_extrinsics.yaml"
     )
@@ -52,8 +52,6 @@ def generate_launch_description():
         extrin_config = yaml.safe_load(extrinsics_path.read_text())
         trans = extrin_config["translation"]
         orient = extrin_config["orientation"]
-        frame_parent = PythonExpression([left_arm_id, "_link0"])
-        frame_child = PythonExpression([right_arm_id, "_link0"])
     except Exception as e:
         return LaunchDescription(
             [
@@ -118,8 +116,8 @@ def generate_launch_description():
                     '--qy', f'{orient["qy"]}',
                     '--qz', f'{orient["qz"]}',
                     '--qw', f'{orient["qw"]}',
-                    '--frame-id', frame_parent,
-                    '--child-frame-id', frame_child
+                    '--frame-id', [left_arm_id, "_link0"],
+                    '--child-frame-id', [right_arm_id, "_link0"]
                 ]
             ),
             IncludeLaunchDescription(
@@ -138,10 +136,10 @@ def generate_launch_description():
                     "arm_id": left_arm_id,
                     "robot_ip": left_ip,
                     "use_arm_id_as_ns": "true",
+                    "use_rviz": "false",
                     load_gripper_parameter_name: load_gripper,
                     use_fake_hardware_parameter_name: use_fake_hardware,
                     fake_sensor_commands_parameter_name: fake_sensor_commands,
-                    use_rviz_parameter_name: "false",
                 }.items(),
             ),
             IncludeLaunchDescription(
@@ -160,10 +158,10 @@ def generate_launch_description():
                     "arm_id": right_arm_id,
                     "robot_ip": right_ip,
                     "use_arm_id_as_ns": "true",
+                    "use_rviz": "false",
                     load_gripper_parameter_name: load_gripper,
                     use_fake_hardware_parameter_name: use_fake_hardware,
                     fake_sensor_commands_parameter_name: fake_sensor_commands,
-                    use_rviz_parameter_name: "false",
                 }.items(),
             ),
             Node(

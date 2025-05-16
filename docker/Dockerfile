@@ -84,6 +84,3 @@ RUN sudo apt-get update \
     && sudo dpkg -i libfranka*.deb
 
 WORKDIR /home/$USERNAME/ros2_ws
-
-# todo: install deps from rosdep
-RUN 

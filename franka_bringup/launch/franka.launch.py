@@ -64,6 +64,18 @@ def generate_launch_description():
             controllers_file,
         ]
     )
+    joint_name_postfix = '_finger_joint'
+    joint_names = [
+        '[',
+        arm_id,
+        joint_name_postfix,
+        '1',
+        ',',
+        arm_id,
+        joint_name_postfix,
+        '2',
+        ']',
+    ]
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -153,6 +165,7 @@ def generate_launch_description():
                 robot_ip_parameter_name: robot_ip,
                 use_fake_hardware_parameter_name: use_fake_hardware,
                 "namespace": namespace,
+                "joint_names": joint_names,
             }.items(),
             condition=IfCondition(load_gripper)
         ),

@@ -15,28 +15,42 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
+    arm_id_parameter_name = 'arm_id'
     robot_ip_parameter_name = 'robot_ip'
+    use_arm_id_as_ns_parameter_name = 'use_arm_id_as_ns'
     load_gripper_parameter_name = 'load_gripper'
     use_fake_hardware_parameter_name = 'use_fake_hardware'
     fake_sensor_commands_parameter_name = 'fake_sensor_commands'
     use_rviz_parameter_name = 'use_rviz'
 
+    arm_id = LaunchConfiguration(arm_id_parameter_name)
     robot_ip = LaunchConfiguration(robot_ip_parameter_name)
+    use_arm_id_as_ns = LaunchConfiguration(use_arm_id_as_ns_parameter_name)
     load_gripper = LaunchConfiguration(load_gripper_parameter_name)
     use_fake_hardware = LaunchConfiguration(use_fake_hardware_parameter_name)
     fake_sensor_commands = LaunchConfiguration(fake_sensor_commands_parameter_name)
     use_rviz = LaunchConfiguration(use_rviz_parameter_name)
+    namespace = PythonExpression(["'/' + '", arm_id, "' if '",
+                                  use_arm_id_as_ns, "' == 'true' else ''"])
 
     return LaunchDescription([
         DeclareLaunchArgument(
+            arm_id_parameter_name,
+            default_value='panda',
+            description='Name of the robot.'),
+        DeclareLaunchArgument(
             robot_ip_parameter_name,
             description='Hostname or IP address of the robot.'),
+        DeclareLaunchArgument(
+            use_arm_id_as_ns_parameter_name,
+            default_value='true',
+            description='Use arm_id as namespace.'),
         DeclareLaunchArgument(
             use_rviz_parameter_name,
             default_value='false',
@@ -59,7 +73,9 @@ def generate_launch_description():
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource([PathJoinSubstitution(
                 [FindPackageShare('franka_bringup'), 'launch', 'franka.launch.py'])]),
-            launch_arguments={robot_ip_parameter_name: robot_ip,
+            launch_arguments={arm_id_parameter_name: arm_id,
+                              robot_ip_parameter_name: robot_ip,
+                              use_arm_id_as_ns_parameter_name: use_arm_id_as_ns,
                               load_gripper_parameter_name: load_gripper,
                               use_fake_hardware_parameter_name: use_fake_hardware,
                               fake_sensor_commands_parameter_name: fake_sensor_commands,
@@ -70,7 +86,8 @@ def generate_launch_description():
         Node(
             package='controller_manager',
             executable='spawner',
-            arguments=['gravity_compensation_example_controller'],
+            namespace=namespace,
+            arguments=['gravity_compensation_example_controller', '-c', [namespace, '/controller_manager']],
             output='screen',
         ),
     ])

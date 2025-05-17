@@ -78,6 +78,7 @@ class CartesianImpedanceExampleController : public controller_interface::Control
   double nullspace_stiffness_target_;
   double translational_clip_;
   double rotational_clip_;
+  bool enable_nullspace_joints_{false};
   Eigen::Matrix<double, 7, 1> q_d_nullspace_;
   Eigen::Vector3d position_d_;
   Eigen::Quaterniond orientation_d_;

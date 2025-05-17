@@ -13,6 +13,8 @@ CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleCon
     auto_declare<double>("nullspace_stiffness", 20.0);
     auto_declare<double>("translational_clip", 0.06);
     auto_declare<double>("rotational_clip", 0.1);
+    auto_declare<bool>("enable_nullspace_joints", false);
+    auto_declare<std::vector<double>>("q_d_nullspace", {});
   } catch (const std::exception& e) {
     fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
     return CallbackReturn::ERROR;
@@ -51,6 +53,8 @@ CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleCon
   translational_clip_ = std::clamp(translational_clip_, 0.0, max_translational_clip);
   rotational_clip_ = get_node()->get_parameter("rotational_clip").as_double();
   rotational_clip_ = std::clamp(rotational_clip_, 0.0, max_rotational_clip);
+  enable_nullspace_joints_ = get_node()->get_parameter("enable_nullspace_joints").as_bool();
+  auto q_d_nullspace = get_node()->get_parameter("q_d_nullspace").as_double_array();
 
   cartesian_stiffness_.setZero();
   cartesian_stiffness_.topLeftCorner(3, 3)
@@ -64,6 +68,10 @@ CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleCon
       << rotational_damping * Eigen::MatrixXd::Identity(3, 3);
   cartesian_stiffness_target_ = cartesian_stiffness_;
   cartesian_damping_target_ = cartesian_damping_;
+  for (int i = 0; i < num_joints; ++i) {
+    q_d_nullspace_(i) = q_d_nullspace.at(i);
+  }
+
   declare_double_parameter(
       "translational_stiffness", "Cartesian translational stiffness",
       translational_stiffness, 0.0, max_translational_stiffness);
@@ -149,8 +157,6 @@ CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleCon
   position_d_target_ = initial_transform.translation();
   orientation_d_target_ = initial_transform.rotation();
 
-  // set nullspace equilibrium configuration to initial q
-  q_d_nullspace_ = q_initial;
   return CallbackReturn::SUCCESS;
 }
 
@@ -217,14 +223,18 @@ controller_interface::return_type CartesianImpedanceExampleController::update(
   // Cartesian PD control with damping ratio = 1
   tau_task << jacobian.transpose() *
                   (-cartesian_stiffness_ * position_error - cartesian_damping_ * (jacobian * dq));
-  // nullspace PD control with damping ratio = 1
+  // Nullspace PD control with damping ratio = 1
   tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
                     jacobian.transpose() * jacobian_transpose_pinv) *
                        (nullspace_stiffness_ * (q_d_nullspace_ - q) -
                         (2.0 * sqrt(nullspace_stiffness_)) * dq);
 
   // Desired torque
-  tau_d << tau_task + tau_nullspace + coriolis;
+  if (enable_nullspace_joints_) {
+    tau_d << tau_task + tau_nullspace + coriolis;
+  } else {
+    tau_d << tau_task + coriolis;
+  }
 
   // saturate the commanded torque to joint limits
   tau_d << saturateTorqueRate(tau_d, tau_j_d);
@@ -328,6 +338,13 @@ rcl_interfaces::msg::SetParametersResult CartesianImpedanceExampleController::pa
       translational_clip_ = param.as_double();
     } else if (param.get_name() == "rotational_clip") {
       rotational_clip_ = param.as_double();
+    } else if (param.get_name() == "enable_nullspace_joints") {
+      enable_nullspace_joints_ = param.as_bool();
+    } else if (param.get_name() == "q_d_nullspace") {
+      auto q_d_nullspace = param.as_double_array();
+      for (int i = 0; i < num_joints; ++i) {
+        q_d_nullspace_(i) = q_d_nullspace.at(i);
+      }
     } else {
       result.successful = false;
       result.reason = "Parameter set behavior not defined";

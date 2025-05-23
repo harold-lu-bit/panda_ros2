@@ -22,8 +22,7 @@ services:
       - ../:/home/${USERNAME}/ros2_ws/src/franka_ros2
       - /tmp/.X11-unix:/tmp/.X11-unix
       - ./limits.conf:/etc/security/limits.conf
-      # - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-      - .vscode-server:/home/${USERNAME}/.vscode-server:rwfranka_panda_ros2_bosch
+      - .vscode-server:/home/${USERNAME}/.vscode-server:rw
       - .vscode:/home/${USERNAME}/ros2_ws/.vscode:rw
     environment:
       QT_X11_NO_MITSHM: 1

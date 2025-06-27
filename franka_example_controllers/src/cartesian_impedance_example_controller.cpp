@@ -3,13 +3,14 @@
 
 namespace franka_example_controllers {
 
-const double max_translational_stiffness = 800.0;
+const double max_translational_stiffness = 1000.0;
 const double max_translational_damping = 200.0;
 const double max_rotational_stiffness = 150.0;
 const double max_rotational_damping = 30.0;
 const double max_nullspace_stiffness = 50.0;
 const double max_translational_clip = 0.1;
 const double max_rotational_clip = 0.15;
+const std::string name_arm_id = "arm_id";
 const std::string name_translational_stiffness = "translational_stiffness";
 const std::string name_translational_damping = "translational_damping";
 const std::string name_rotational_stiffness = "rotational_stiffness";
@@ -36,16 +37,16 @@ static Eigen::Index findMatching(const Eigen::VectorXd& key,
 
 CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleController::on_init() {
   try {
-    auto_declare<std::string>("arm_id", "panda");
-    auto_declare<double>("translational_stiffness", 500.0);
-    auto_declare<double>("translational_damping", 100.0);
-    auto_declare<double>("rotational_stiffness", 60.0);
-    auto_declare<double>("rotational_damping", 6.0);
-    auto_declare<double>("nullspace_stiffness", 20.0);
-    auto_declare<double>("translational_clip", 0.06);
-    auto_declare<double>("rotational_clip", 0.1);
-    auto_declare<bool>("enable_nullspace_joints", false);
-    auto_declare<std::vector<double>>("q_d_nullspace", {});
+    auto_declare<std::string>(name_arm_id, "panda");
+    auto_declare<double>(name_translational_stiffness, 500.0);
+    auto_declare<double>(name_translational_damping, 100.0);
+    auto_declare<double>(name_rotational_stiffness, 60.0);
+    auto_declare<double>(name_rotational_damping, 6.0);
+    auto_declare<double>(name_nullspace_stiffness, 20.0);
+    auto_declare<double>(name_translational_clip, 0.06);
+    auto_declare<double>(name_rotational_clip, 0.1);
+    auto_declare<bool>(name_enable_nullspace_joints, false);
+    auto_declare<std::vector<double>>(name_q_d_nullspace, {});
   } catch (const std::exception& e) {
     fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
     return CallbackReturn::ERROR;

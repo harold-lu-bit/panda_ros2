@@ -83,4 +83,16 @@ RUN sudo apt-get update \
     && cpack -G DEB \
     && sudo dpkg -i libfranka*.deb
 
+# switch DDS implementation to zenoh
+ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp
+RUN sudo apt-get update \
+    && sudo apt-get install -y ros-$ROS_DISTRO-rmw-zenoh-cpp \
+    && sudo apt-get clean \
+    && sudo rm -rf /var/lib/apt/lists/*
+
+ARG IDE_TYPE
+# make workspace dir and ide-specific dir. note that .vscode work for both vscode and cursor
+RUN mkdir /home/${USERNAME}/.$IDE_TYPE-server \
+    && mkdir -p /home/${USERNAME}/ros2_ws/.vscode \
+    && mkdir /home/${USERNAME}/ros2_ws/src
 WORKDIR /home/$USERNAME/ros2_ws

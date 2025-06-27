@@ -1,5 +1,4 @@
-version: '2'
-
+name: panda_ros2
 services:
   panda_ros2:
     build:
@@ -12,6 +11,7 @@ services:
         - USER_GID=${USER_GID:?error}
         - USERNAME=${USERNAME:?error}
         - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:?error}
+        - IDE_TYPE=${IDE_TYPE:?error}
     container_name: panda_ros2
     network_mode: "host"
     privileged: true
@@ -22,8 +22,8 @@ services:
       - ../:/home/${USERNAME}/ros2_ws/src/franka_ros2
       - /tmp/.X11-unix:/tmp/.X11-unix
       - ./limits.conf:/etc/security/limits.conf
-      - .vscode-server:/home/${USERNAME}/.vscode-server:rw
-      - .vscode:/home/${USERNAME}/ros2_ws/.vscode:rw
+      - cache-ide_server:/home/${USERNAME}/.vscode-server
+      - cache-ide_settings:/home/${USERNAME}/ros2_ws/.vscode
     environment:
       QT_X11_NO_MITSHM: 1
       DISPLAY: $DISPLAY
@@ -35,3 +35,6 @@ services:
       rtprio: 99
       rttime: -1
       memlock: 8428281856
+volumes:
+  cache-ide_server:
+  cache-ide_settings:

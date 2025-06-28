@@ -10,12 +10,22 @@ services:
         - USER_UID=${USER_UID:?error}
         - USER_GID=${USER_GID:?error}
         - USERNAME=${USERNAME:?error}
-        - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:?error}
         - IDE_TYPE=${IDE_TYPE:?error}
     container_name: panda_ros2
     network_mode: "host"
     privileged: true
-    command: /bin/bash
+    # compile after the container starts
+    command: >
+      bash -c "
+        source /opt/ros/humble/setup.bash &&
+        colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release &&
+        if [ $$? -eq 0 ]; then
+          touch install/COLCON_SUCCESS;
+        else
+          touch install/COLCON_FAILED;
+        fi &&
+        tail -f /dev/null
+      "
     tty: true
     stdin_open: true
     volumes:
@@ -29,6 +39,7 @@ services:
       DISPLAY: $DISPLAY
       TERM: xterm-256color
       ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:?error}
+      ROS_LOCALHOST_ONLY: ${ROS_LOCALHOST_ONLY:?error}
     cap_add:
       - SYS_NICE
     ulimits:

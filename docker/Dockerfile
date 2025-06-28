@@ -16,7 +16,6 @@ RUN apt-get update && \
         curl \
         gdb \
         git \
-        vim \
         openssh-client \
         python3-colcon-argcomplete \
         python3-colcon-common-extensions \
@@ -32,41 +31,48 @@ RUN groupadd --gid $USER_GID $USERNAME \
     && echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/$USERNAME/.bashrc \
     && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/$USERNAME/.bashrc
 
-# Install some ROS 2 dependencies to create a cache layer
+# switch DDS implementation to zenoh
+ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        ros-humble-ros-gz \
-        ros-humble-sdformat-urdf \
-        ros-humble-joint-state-publisher-gui \
-        ros-humble-ros2controlcli \
-        ros-humble-controller-interface \
-        ros-humble-hardware-interface-testing \
-        ros-humble-ament-cmake-clang-format \
-        ros-humble-ament-cmake-clang-tidy \
-        ros-humble-controller-manager \
-        ros-humble-ros2-control-test-assets \
-        libignition-gazebo6-dev \
-        libignition-plugin-dev \
-        ros-humble-hardware-interface \
-        ros-humble-control-msgs \
-        ros-humble-backward-ros \
-        ros-humble-generate-parameter-library \
-        ros-humble-realtime-tools \
-        ros-humble-joint-state-publisher \
-        ros-humble-joint-state-broadcaster \
-        ros-humble-moveit-ros-move-group \
-        ros-humble-moveit-kinematics \
-        ros-humble-moveit-planners-ompl \
-        ros-humble-moveit-ros-visualization \
-        ros-humble-joint-trajectory-controller \
-        ros-humble-moveit-simple-controller-manager \
-        ros-humble-rviz2 \
-        ros-humble-xacro \
+    && apt-get install -y ros-$ROS_DISTRO-rmw-zenoh-cpp \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 USER $USERNAME
 
+# Dependencies for panda_ros2
+RUN sudo apt-get update \
+    && sudo apt-get install -y --no-install-recommends \
+        libignition-gazebo6-dev \
+        libignition-plugin-dev \
+        ros-${ROS_DISTRO}-ros-gz \
+        ros-${ROS_DISTRO}-sdformat-urdf \
+        ros-${ROS_DISTRO}-joint-state-publisher-gui \
+        ros-${ROS_DISTRO}-ros2controlcli \
+        ros-${ROS_DISTRO}-controller-interface \
+        ros-${ROS_DISTRO}-hardware-interface-testing \
+        ros-${ROS_DISTRO}-ament-cmake-clang-format \
+        ros-${ROS_DISTRO}-ament-cmake-clang-tidy \
+        ros-${ROS_DISTRO}-controller-manager \
+        ros-${ROS_DISTRO}-ros2-control-test-assets \
+        ros-${ROS_DISTRO}-hardware-interface \
+        ros-${ROS_DISTRO}-control-msgs \
+        ros-${ROS_DISTRO}-backward-ros \
+        ros-${ROS_DISTRO}-generate-parameter-library \
+        ros-${ROS_DISTRO}-realtime-tools \
+        ros-${ROS_DISTRO}-joint-state-publisher \
+        ros-${ROS_DISTRO}-joint-state-broadcaster \
+        ros-${ROS_DISTRO}-moveit-ros-move-group \
+        ros-${ROS_DISTRO}-moveit-kinematics \
+        ros-${ROS_DISTRO}-moveit-planners-ompl \
+        ros-${ROS_DISTRO}-moveit-ros-visualization \
+        ros-${ROS_DISTRO}-joint-trajectory-controller \
+        ros-${ROS_DISTRO}-moveit-simple-controller-manager \
+        ros-${ROS_DISTRO}-rviz2 \
+        ros-${ROS_DISTRO}-xacro \
+    && sudo apt-get clean \
+    && sudo rm -rf /var/lib/apt/lists/*
+# Dependencies for libfranka and libfranka compilation
 ARG https_proxy
 RUN sudo apt-get update \
     && sudo apt-get install -y --no-install-recommends libpoco-dev \
@@ -83,16 +89,10 @@ RUN sudo apt-get update \
     && cpack -G DEB \
     && sudo dpkg -i libfranka*.deb
 
-# switch DDS implementation to zenoh
-ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp
-RUN sudo apt-get update \
-    && sudo apt-get install -y ros-$ROS_DISTRO-rmw-zenoh-cpp \
-    && sudo apt-get clean \
-    && sudo rm -rf /var/lib/apt/lists/*
-
 ARG IDE_TYPE
 # make workspace dir and ide-specific dir. note that .vscode work for both vscode and cursor
 RUN mkdir /home/${USERNAME}/.$IDE_TYPE-server \
     && mkdir -p /home/${USERNAME}/ros2_ws/.vscode \
     && mkdir /home/${USERNAME}/ros2_ws/src
+
 WORKDIR /home/$USERNAME/ros2_ws

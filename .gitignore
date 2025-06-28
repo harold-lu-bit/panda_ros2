@@ -8,7 +8,8 @@ build/
 install/
 log/
 docker/.vscode-server/
-*.env
 franka_bringup/config/*.yaml
 !franka_bringup/config/dual_arm_extrinsics_demo.yaml
 !franka_bringup/config/controllers.yaml
+docker/secrets/
+docker/*.env

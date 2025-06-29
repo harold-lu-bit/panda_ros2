@@ -34,6 +34,7 @@ def generate_launch_description():
     use_fake_hardware_parameter_name = 'use_fake_hardware'
     fake_sensor_commands_parameter_name = 'fake_sensor_commands'
     use_rviz_parameter_name = 'use_rviz'
+    publish_description_name = 'publish_description'
 
     arm_id = LaunchConfiguration(arm_id_parameter_name)
     robot_ip = LaunchConfiguration(robot_ip_parameter_name)
@@ -43,6 +44,7 @@ def generate_launch_description():
     use_fake_hardware = LaunchConfiguration(use_fake_hardware_parameter_name)
     fake_sensor_commands = LaunchConfiguration(fake_sensor_commands_parameter_name)
     use_rviz = LaunchConfiguration(use_rviz_parameter_name)
+    publish_description = LaunchConfiguration(publish_description_name)
     namespace = PythonExpression(["'/' + '", arm_id, "' if '",
                                   use_arm_id_as_ns, "' == 'true' else ''"])
 
@@ -111,6 +113,10 @@ def generate_launch_description():
             default_value='true',
             description='Use Franka Gripper as an end-effector, otherwise, the robot is loaded '
                         'without an end-effector.'),
+        DeclareLaunchArgument(
+            publish_description_name,
+            default_value='true',
+            description='Publish the robot description through topic.'),
         Node(
             package='robot_state_publisher',
             executable='robot_state_publisher',
@@ -118,6 +124,7 @@ def generate_launch_description():
             name='robot_state_publisher',
             output='screen',
             parameters=[{'robot_description': robot_description}],
+            condition=IfCondition(publish_description),
         ),
         Node(
             package='joint_state_publisher',
@@ -127,6 +134,7 @@ def generate_launch_description():
             parameters=[
                 {'source_list': ['panda_arm/joint_states', 'panda_gripper/joint_states'],
                  'rate': 30}],
+            condition=IfCondition(publish_description)
         ),
         Node(
             package='controller_manager',

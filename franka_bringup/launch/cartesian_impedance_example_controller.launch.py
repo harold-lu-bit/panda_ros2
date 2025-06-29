@@ -14,6 +14,7 @@ def generate_launch_description():
     use_fake_hardware_parameter_name = 'use_fake_hardware'
     fake_sensor_commands_parameter_name = 'fake_sensor_commands'
     use_rviz_parameter_name = 'use_rviz'
+    publish_description_name = 'publish_description'
 
     arm_id = LaunchConfiguration(arm_id_parameter_name)
     robot_ip = LaunchConfiguration(robot_ip_parameter_name)
@@ -22,6 +23,7 @@ def generate_launch_description():
     use_fake_hardware = LaunchConfiguration(use_fake_hardware_parameter_name)
     fake_sensor_commands = LaunchConfiguration(fake_sensor_commands_parameter_name)
     use_rviz = LaunchConfiguration(use_rviz_parameter_name)
+    publish_description = LaunchConfiguration(publish_description_name)
     namespace = PythonExpression(["'/' + '", arm_id, "' if '",
                                   use_arm_id_as_ns, "' == 'true' else ''"])
 
@@ -55,6 +57,10 @@ def generate_launch_description():
             default_value='true',
             description='Use Franka Gripper as an end-effector, otherwise, the robot is loaded '
                         'without an end-effector.'),
+        DeclareLaunchArgument(
+            publish_description_name,
+            default_value='true',
+            description='Publish the robot description through topic.'),
 
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource([PathJoinSubstitution(
@@ -65,7 +71,8 @@ def generate_launch_description():
                               load_gripper_parameter_name: load_gripper,
                               use_fake_hardware_parameter_name: use_fake_hardware,
                               fake_sensor_commands_parameter_name: fake_sensor_commands,
-                              use_rviz_parameter_name: use_rviz
+                              use_rviz_parameter_name: use_rviz,
+                              publish_description_name: publish_description,
                               }.items(),
         ),
         Node(

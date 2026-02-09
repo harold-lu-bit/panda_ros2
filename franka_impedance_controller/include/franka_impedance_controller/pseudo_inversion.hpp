@@ -2,7 +2,7 @@
 
 #include <Eigen/Dense>
 
-namespace franka_example_controllers {
+namespace franka_impedance_controller {
 
 inline Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& M_, bool damped = true) {
   double lambda_ = damped ? 0.2 : 0.0;
@@ -18,4 +18,4 @@ inline Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& M_, bool damped = tr
   return svd.matrixV() * S_.transpose() * svd.matrixU().transpose();
 }
 
-}  // namespace franka_example_controllers
+}  // namespace franka_impedance_controller

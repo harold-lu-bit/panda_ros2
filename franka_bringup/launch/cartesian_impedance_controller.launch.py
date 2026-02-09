@@ -79,7 +79,7 @@ def generate_launch_description():
             package='controller_manager',
             executable='spawner',
             namespace=namespace,
-            arguments=['cartesian_impedance_example_controller', '-c', [namespace, '/controller_manager'],],
+            arguments=['cartesian_impedance_controller', '-c', [namespace, '/controller_manager'],],
             output='screen',
         ),
     ])

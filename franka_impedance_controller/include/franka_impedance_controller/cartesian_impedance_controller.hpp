@@ -13,21 +13,21 @@
 #include <vector>
 
 #include <rclcpp/time.hpp>
-#include "geometry_msgs/msg/pose_stamped.hpp"
-#include "rclcpp/node.hpp"
-#include "rclcpp/rclcpp.hpp"
-#include "std_msgs/msg/float32.hpp"
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <rclcpp/node.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/float32.hpp>
 
 #include <franka/robot_state.h>
 #include <controller_interface/controller_interface.hpp>
 #include <franka_msgs/msg/franka_robot_state.hpp>
-#include "franka_semantic_components/franka_robot_model.hpp"
-#include "franka_semantic_components/franka_robot_state.hpp"
+#include <franka_semantic_components/franka_robot_model.hpp>
+#include <franka_semantic_components/franka_robot_state.hpp>
 
-#include "franka_example_controllers/visibility_control.h"
+#include "visibility_control.h"
 
-namespace franka_example_controllers {
-class CartesianImpedanceExampleController : public controller_interface::ControllerInterface {
+namespace franka_impedance_controller {
+class CartesianImpedanceController : public controller_interface::ControllerInterface {
  public:
   using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
@@ -113,4 +113,4 @@ class CartesianImpedanceExampleController : public controller_interface::Control
       const std::vector<rclcpp::Parameter>& parameters);
 };
 
-}  // namespace franka_example_controllers
+}  // namespace franka_impedance_controller

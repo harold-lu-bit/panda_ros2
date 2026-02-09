@@ -56,6 +56,7 @@ bool FrankaRobotStateBroadcaster::FrankaRobotStateRealtimePublisher::trylock() {
 
 controller_interface::CallbackReturn FrankaRobotStateBroadcaster::on_init() {
   try {
+    auto_declare<std::string>("robot_description", "");
     param_listener = std::make_shared<ParamListener>(get_node());
     params = param_listener->get_params();
   } catch (const std::exception& e) {
@@ -132,7 +133,7 @@ controller_interface::return_type FrankaRobotStateBroadcaster::update(
     RCLCPP_WARN(get_node()->get_logger(),
                  "Failed to lock the realtime publisher after %d attempts",
                  realtime_franka_state_publisher->try_count());
-    return controller_interface::return_type::ERROR;
+    return controller_interface::return_type::OK;
   }
   realtime_franka_state_publisher->msg_.header.stamp = time;
 

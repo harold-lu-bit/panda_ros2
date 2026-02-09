@@ -1,51 +1,52 @@
-name: panda_ros2
+name: panda_ros2_jazzy
 services:
-  panda_ros2:
+  panda_ros2_jazzy:
     build:
       context: .
       dockerfile: Dockerfile
       network: "host"
       args:
-        - https_proxy=${https_proxy}
         - USER_UID=${USER_UID:?error}
         - USER_GID=${USER_GID:?error}
         - USERNAME=${USERNAME:?error}
-        - IDE_TYPE=${IDE_TYPE:?error}
-    container_name: panda_ros2
+    container_name: panda_ros2_jazzy
+    stdin_open: true
+    tty: true
     network_mode: "host"
     privileged: true
-    # compile after the container starts
-    command: >
-      bash -c "
-        source /opt/ros/humble/setup.bash &&
-        colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release &&
-        if [ $$? -eq 0 ]; then
-          touch install/COLCON_SUCCESS;
-        else
-          touch install/COLCON_FAILED;
-        fi &&
-        tail -f /dev/null
-      "
-    tty: true
-    stdin_open: true
-    volumes:
-      - ../:/home/${USERNAME}/ros2_ws/src/franka_ros2
-      - /tmp/.X11-unix:/tmp/.X11-unix
-      - ./limits.conf:/etc/security/limits.conf
-      - cache-ide_server:/home/${USERNAME}/.vscode-server
-      - cache-ide_settings:/home/${USERNAME}/ros2_ws/.vscode
     environment:
       QT_X11_NO_MITSHM: 1
       DISPLAY: $DISPLAY
       TERM: xterm-256color
       ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:?error}
-      ROS_LOCALHOST_ONLY: ${ROS_LOCALHOST_ONLY:?error}
+      ROS_AUTOMATIC_DISCOVERY_RANGE: ${ROS_AUTOMATIC_DISCOVERY_RANGE:?error}
+      XDG_RUNTIME_DIR: /tmp/runtime_dir
+    volumes:
+      - ../:/workspace/ros2_ws/src/panda_ros2
+      - ./limits.conf:/etc/security/limits.conf
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /dev:/dev
+      - ${XDG_RUNTIME_DIR:?error}:/tmp/runtime_dir
+      - cache-vscode_server:/home/${USERNAME:?error}/.vscode-server
+      - cache-home_cache:/home/${USERNAME:?error}/.cache
+    command: bash -c "ln -sf /workspace/ros2_ws/src/panda_ros2/docker/colcon_defaults.yaml /workspace/ros2_ws/colcon_defaults.yaml && tail -f /dev/null"
+    device_cgroup_rules:
+      # D405 video4linux
+      - 'c 81:* rmw'
+      # spacemouse
+      - 'c 5:* rmw'
+      - 'c 239:* rmw'
     cap_add:
       - SYS_NICE
     ulimits:
       rtprio: 99
       rttime: -1
       memlock: 8428281856
+
 volumes:
-  cache-ide_server:
-  cache-ide_settings:
+  cache-vscode_server:
+  cache-home_cache:
+
+secrets:
+  sudo_password:
+    file: ${SUDO_PASSWORD_PATH:?error}

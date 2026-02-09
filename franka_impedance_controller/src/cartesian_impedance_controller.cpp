@@ -1,7 +1,8 @@
-#include "franka_example_controllers/cartesian_impedance_example_controller.hpp"
-#include "franka_example_controllers/pseudo_inversion.hpp"
+#include "franka_impedance_controller/cartesian_impedance_controller.hpp"
+#include <algorithm>
+#include "franka_impedance_controller/pseudo_inversion.hpp"
 
-namespace franka_example_controllers {
+namespace franka_impedance_controller {
 
 const double max_translational_stiffness = 1000.0;
 const double max_translational_damping = 200.0;
@@ -35,16 +36,29 @@ static Eigen::Index findMatching(const Eigen::VectorXd& key,
                                  const Eigen::MatrixXd& haystack,
                                  const Eigen::VectorXi& available);
 
-CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleController::on_init() {
+CartesianImpedanceController::CallbackReturn CartesianImpedanceController::on_init() {
   try {
     auto_declare<std::string>(name_arm_id, "panda");
-    auto_declare<double>(name_translational_stiffness, 500.0);
-    auto_declare<double>(name_translational_damping, 100.0);
-    auto_declare<double>(name_rotational_stiffness, 60.0);
-    auto_declare<double>(name_rotational_damping, 6.0);
-    auto_declare<double>(name_nullspace_stiffness, 20.0);
-    auto_declare<double>(name_translational_clip, 0.06);
-    auto_declare<double>(name_rotational_clip, 0.1);
+    auto_declare<std::string>("robot_description", "");
+    declare_double_parameter(get_node(), name_translational_stiffness,
+                             "Cartesian translational stiffness", 500.0, 0.0,
+                             max_translational_stiffness);
+    declare_double_parameter(get_node(), name_translational_damping,
+                             "Cartesian translational damping", 100.0, 0.0,
+                             max_translational_damping);
+    declare_double_parameter(get_node(), name_rotational_stiffness,
+                             "Cartesian rotational stiffness", 60.0, 0.0, max_rotational_stiffness);
+    declare_double_parameter(get_node(), name_rotational_damping, "Cartesian rotational damping",
+                             6.0, 0.0, max_rotational_damping);
+    declare_double_parameter(get_node(), name_nullspace_stiffness, "Nullspace stiffness", 20.0, 0.0,
+                             max_nullspace_stiffness);
+    declare_double_parameter(get_node(), name_translational_clip,
+                             "Cartesian translational error clip", 0.06, 0.0,
+                             max_translational_clip);
+    declare_double_parameter(get_node(), name_rotational_clip, "Cartesian rotational error clip",
+                             0.1, 0.0, max_rotational_clip);
+    // declare_double_parameter(get_node(), name_q_limit, "Nullspace joint error limit", q_limit_,
+    //                          0.0, max_q_limit);
     auto_declare<bool>(name_enable_nullspace_joints, false);
     auto_declare<std::vector<double>>(name_q_d_nullspace, {});
   } catch (const std::exception& e) {
@@ -54,13 +68,12 @@ CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleCon
   // Equilibrium pose subscription
   sub_equilibrium_pose_ = get_node()->create_subscription<geometry_msgs::msg::PoseStamped>(
       "equilibrium_pose", 20,
-      std::bind(&CartesianImpedanceExampleController::equilibriumPoseCallback, this,
+      std::bind(&CartesianImpedanceController::equilibriumPoseCallback, this,
                 std::placeholders::_1));
   // Nullspace exploration direction subscription
   sub_nullspace_dir_ = get_node()->create_subscription<std_msgs::msg::Float32>(
       "nullspace_direction", 20,
-      std::bind(&CartesianImpedanceExampleController::nullspaceDirCallback, this,
-                std::placeholders::_1));
+      std::bind(&CartesianImpedanceController::nullspaceDirCallback, this, std::placeholders::_1));
 
   position_d_.setZero();
   orientation_d_.coeffs() << 0.0, 0.0, 0.0, 1.0;
@@ -74,7 +87,7 @@ CartesianImpedanceExampleController::CallbackReturn CartesianImpedanceExampleCon
 }
 
 controller_interface::InterfaceConfiguration
-CartesianImpedanceExampleController::command_interface_configuration() const {
+CartesianImpedanceController::command_interface_configuration() const {
   // Define command interfaces
   controller_interface::InterfaceConfiguration command_interfaces_config;
   command_interfaces_config.type = controller_interface::interface_configuration_type::INDIVIDUAL;
@@ -87,7 +100,7 @@ CartesianImpedanceExampleController::command_interface_configuration() const {
 }
 
 controller_interface::InterfaceConfiguration
-CartesianImpedanceExampleController::state_interface_configuration() const {
+CartesianImpedanceController::state_interface_configuration() const {
   // Define state interfaces
   controller_interface::InterfaceConfiguration state_interfaces_config;
   state_interfaces_config.type = controller_interface::interface_configuration_type::INDIVIDUAL;
@@ -97,14 +110,16 @@ CartesianImpedanceExampleController::state_interface_configuration() const {
     state_interfaces_config.names.push_back(franka_robot_model_name);
   }
   // Creates state interface for robot model
-  for (const auto& franka_robot_state_name : franka_robot_state_->get_state_interface_names()) {
-    state_interfaces_config.names.push_back(franka_robot_state_name);
+  for (const auto& name : franka_robot_state_->get_state_interface_names()) {
+    if (std::find(state_interfaces_config.names.begin(), state_interfaces_config.names.end(),
+                  name) == state_interfaces_config.names.end()) {
+      state_interfaces_config.names.push_back(name);
+    }
   }
   return state_interfaces_config;
 }
 
-CartesianImpedanceExampleController::CallbackReturn
-CartesianImpedanceExampleController::on_configure(
+CartesianImpedanceController::CallbackReturn CartesianImpedanceController::on_configure(
     const rclcpp_lifecycle::State& /*previous_state*/) {
   arm_id_ = get_node()->get_parameter("arm_id").as_string();
   auto robot_description = get_node()->get_parameter("robot_description").as_string();
@@ -117,8 +132,7 @@ CartesianImpedanceExampleController::on_configure(
   return CallbackReturn::SUCCESS;
 }
 
-CartesianImpedanceExampleController::CallbackReturn
-CartesianImpedanceExampleController::on_activate(
+CartesianImpedanceController::CallbackReturn CartesianImpedanceController::on_activate(
     const rclcpp_lifecycle::State& /*previous_state*/) {
   franka_robot_state_->assign_loaned_state_interfaces(state_interfaces_);
   franka_robot_model_->assign_loaned_state_interfaces(state_interfaces_);
@@ -137,14 +151,14 @@ CartesianImpedanceExampleController::on_activate(
   return CallbackReturn::SUCCESS;
 }
 
-controller_interface::CallbackReturn CartesianImpedanceExampleController::on_deactivate(
+controller_interface::CallbackReturn CartesianImpedanceController::on_deactivate(
     const rclcpp_lifecycle::State& /*previous_state*/) {
   franka_robot_state_->release_interfaces();
   franka_robot_model_->release_interfaces();
   return CallbackReturn::SUCCESS;
 }
 
-controller_interface::return_type CartesianImpedanceExampleController::update(
+controller_interface::return_type CartesianImpedanceController::update(
     const rclcpp::Time& /*time*/,
     const rclcpp::Duration& /*period*/
 ) {
@@ -251,7 +265,7 @@ controller_interface::return_type CartesianImpedanceExampleController::update(
  * target pose.
  */
 
-void CartesianImpedanceExampleController::equilibriumPoseCallback(
+void CartesianImpedanceController::equilibriumPoseCallback(
     const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
   std::lock_guard<std::mutex> position_d_target_mutex_lock(
       position_and_orientation_d_target_mutex_);
@@ -264,12 +278,12 @@ void CartesianImpedanceExampleController::equilibriumPoseCallback(
   }
 }
 
-void CartesianImpedanceExampleController::nullspaceDirCallback(
+void CartesianImpedanceController::nullspaceDirCallback(
     const std_msgs::msg::Float32::SharedPtr msg) {
   nullspace_explore_dir_ = std::clamp(msg->data, -1.0f, 1.0f);
 }
 
-Eigen::Matrix<double, 7, 1> CartesianImpedanceExampleController::saturateTorqueRate(
+Eigen::Matrix<double, 7, 1> CartesianImpedanceController::saturateTorqueRate(
     const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
     const Eigen::Matrix<double, 7, 1>& tau_j_d) {  // NOLINT (readability-identifier-naming)
   Eigen::Matrix<double, 7, 1> tau_d_saturated{};
@@ -281,7 +295,7 @@ Eigen::Matrix<double, 7, 1> CartesianImpedanceExampleController::saturateTorqueR
   return tau_d_saturated;
 }
 
-Eigen::Matrix<double, 7, 1> CartesianImpedanceExampleController::saturateTorque(
+Eigen::Matrix<double, 7, 1> CartesianImpedanceController::saturateTorque(
     const Eigen::Matrix<double, 7, 1>&
         tau_d_calculated) {  // NOLINT (readability-identifier-naming)
   Eigen::Matrix<double, 7, 1> tau_d_saturated{};
@@ -293,7 +307,7 @@ Eigen::Matrix<double, 7, 1> CartesianImpedanceExampleController::saturateTorque(
 
 // Reference:
 // https://github.com/moveit/moveit/blob/master/moveit_ros/visualization/motion_planning_rviz_plugin/src/motion_planning_frame_joints_widget.cpp#L377
-void CartesianImpedanceExampleController::updateNullspaceExploration(
+void CartesianImpedanceController::updateNullspaceExploration(
     const Eigen::Map<Eigen::Matrix<double, 6, 7>> jacobian) {
   if (std::fabs(nullspace_explore_dir_) < 1e-5) {
     enable_nullspace_joints_explore_ = false;
@@ -319,7 +333,7 @@ void CartesianImpedanceExampleController::updateNullspaceExploration(
   q_d_nullspace_explore_error_ = nullspace_explore_dir_ * nullspace_base_.col(0);
 }
 
-void CartesianImpedanceExampleController::configure_parameters() {
+void CartesianImpedanceController::configure_parameters() {
   auto node_ptr = get_node();
   auto translational_stiffness = node_ptr->get_parameter(name_translational_stiffness).as_double();
   translational_stiffness = std::clamp(translational_stiffness, 0.0, max_translational_stiffness);
@@ -356,28 +370,11 @@ void CartesianImpedanceExampleController::configure_parameters() {
     q_d_nullspace_(i) = q_d_nullspace.at(i);
   }
 
-  declare_double_parameter(node_ptr, name_translational_stiffness,
-                           "Cartesian translational stiffness", translational_stiffness, 0.0,
-                           max_translational_stiffness);
-  declare_double_parameter(node_ptr, name_translational_damping, "Cartesian translational damping",
-                           translational_damping, 0.0, max_translational_damping);
-  declare_double_parameter(node_ptr, name_rotational_stiffness, "Cartesian rotational stiffness",
-                           rotational_stiffness, 0.0, max_rotational_stiffness);
-  declare_double_parameter(node_ptr, name_rotational_damping, "Cartesian rotational damping",
-                           rotational_damping, 0.0, max_rotational_damping);
-  declare_double_parameter(node_ptr, name_nullspace_stiffness, "Nullspace stiffness",
-                           nullspace_stiffness_, 0.0, max_nullspace_stiffness);
-  declare_double_parameter(node_ptr, name_translational_clip, "Cartesian translational error clip",
-                           translational_clip_, 0.0, max_translational_clip);
-  declare_double_parameter(node_ptr, name_rotational_clip, "Cartesian rotational error clip",
-                           rotational_clip_, 0.0, max_rotational_clip);
-  // declare_double_parameter(node_ptr, name_q_limit, "Nullspace joint error limit", q_limit_, 0.0,
-  //                          max_q_limit);
   param_handle_ = node_ptr->add_on_set_parameters_callback(
-      std::bind(&CartesianImpedanceExampleController::param_callback, this, std::placeholders::_1));
+      std::bind(&CartesianImpedanceController::param_callback, this, std::placeholders::_1));
 }
 
-rcl_interfaces::msg::SetParametersResult CartesianImpedanceExampleController::param_callback(
+rcl_interfaces::msg::SetParametersResult CartesianImpedanceController::param_callback(
     const std::vector<rclcpp::Parameter>& parameters) {
   rcl_interfaces::msg::SetParametersResult result;
   result.successful = true;
@@ -427,10 +424,9 @@ void declare_double_parameter(std::shared_ptr<rclcpp_lifecycle::LifecycleNode> n
   range.to_value = to_value;
   parameter_descriptor.floating_point_range.emplace_back(range);
   parameter_descriptor.description = description;
-  if (node_ptr->has_parameter(name)) {
-    node_ptr->undeclare_parameter(name);
+  if (!node_ptr->has_parameter(name)) {
+    node_ptr->declare_parameter<double>(name, default_value, parameter_descriptor);
   }
-  node_ptr->declare_parameter<double>(name, default_value, parameter_descriptor);
 }
 
 static Eigen::Index findMatching(const Eigen::VectorXd& key,
@@ -453,10 +449,10 @@ static Eigen::Index findMatching(const Eigen::VectorXd& key,
   }
   return result;
 }
-}  // namespace franka_example_controllers
+}  // namespace franka_impedance_controller
 
 // Expose the controller as visible to the rest of ros2_control
 #include "pluginlib/class_list_macros.hpp"
 
-PLUGINLIB_EXPORT_CLASS(franka_example_controllers::CartesianImpedanceExampleController,
+PLUGINLIB_EXPORT_CLASS(franka_impedance_controller::CartesianImpedanceController,
                        controller_interface::ControllerInterface)

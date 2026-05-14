@@ -14,28 +14,47 @@ services:
     tty: true
     network_mode: "host"
     privileged: true
+    ipc: host
+    entrypoint: ["/inin_entrypoint.sh"]
+    # set default args of workspace
+    command: bash -c "ln -sf /workspace/ros2_ws/src/panda_ros2/docker/colcon_defaults.yaml /workspace/ros2_ws/colcon_defaults.yaml && tail -f /dev/null"
     environment:
+      # ----- GUI support -----
+      DISPLAY: ${DISPLAY:?error}
+      # Inherit WAYLAND_DISPLAY only if it exists on host, otherwise leave unset
+      WAYLAND_DISPLAY: ${WAYLAND_DISPLAY}
+      XDG_RUNTIME_DIR: /tmp/runtime_dir
+      # Try Wayland natively first; fallback to X11 (xcb) if WAYLAND_DISPLAY is unset/invalid
+      QT_QPA_PLATFORM: "wayland;xcb"
+      GDK_BACKEND: "wayland,x11"
+      # Disable shared memory when using X11, no need if `ipc: host` is set
       QT_X11_NO_MITSHM: 1
-      DISPLAY: $DISPLAY
+
+      # for terminal color
       TERM: xterm-256color
+
+      # ROS2 env
       ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:?error}
       ROS_AUTOMATIC_DISCOVERY_RANGE: ${ROS_AUTOMATIC_DISCOVERY_RANGE:?error}
-      XDG_RUNTIME_DIR: /tmp/runtime_dir
     volumes:
       - ../:/workspace/ros2_ws/src/panda_ros2
       - ./limits.conf:/etc/security/limits.conf
+
+      # for using gui through x11
       - /tmp/.X11-unix:/tmp/.X11-unix
-      - /dev:/dev
+      # wayland socket & XAUTHORITY
       - ${XDG_RUNTIME_DIR:?error}:/tmp/runtime_dir
+
+      - /dev:/dev
       - cache-vscode_server:/home/${USERNAME:?error}/.vscode-server
       - cache-home_cache:/home/${USERNAME:?error}/.cache
-    command: bash -c "ln -sf /workspace/ros2_ws/src/panda_ros2/docker/colcon_defaults.yaml /workspace/ros2_ws/colcon_defaults.yaml && tail -f /dev/null"
     device_cgroup_rules:
       # D405 video4linux
       - 'c 81:* rmw'
       # spacemouse
       - 'c 5:* rmw'
       - 'c 239:* rmw'
+    # for real-time capabilities
     cap_add:
       - SYS_NICE
     ulimits:

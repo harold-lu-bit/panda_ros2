@@ -81,7 +81,17 @@ RUN apt-get update \
   && cpack -G DEB \
   && dpkg -i libfranka*.deb
 
+# topic-tools for throttle topic rate
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ros-jazzy-topic-tools \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+
 RUN mkdir /workspace && chown -R ${USERNAME}:${USERNAME} /workspace
+
+# entry point to set xauthority for xwayland
+COPY --chmod=755 inin_entrypoint.sh /inin_entrypoint.sh
 
 USER ${USERNAME}
 

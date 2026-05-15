@@ -14,32 +14,31 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <string>
-#include <unordered_map>
+#include <thread>
 #include <vector>
 
 #include "controller_interface/controller_interface.hpp"
-#include <franka_robot_state_broadcaster/franka_robot_state_broadcaster_parameters.hpp>
+#include "franka_msgs/msg/franka_robot_state.hpp"
+#include "franka_robot_state_broadcaster/async_buffer.hpp"
+#include "franka_robot_state_broadcaster/franka_robot_state_broadcaster_parameters.hpp"
 #include "franka_semantic_components/franka_robot_state.hpp"
-#include "rclcpp_lifecycle/lifecycle_publisher.hpp"
-#include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/wrench_stamped.hpp"
-
-// define NON_POLLING before including realtime_publisher to ensure that
-// the realtime_tools::RealtimePublisher uses a better synchronization strategy than sleeping for 500 Microseconds !
-#define NON_POLLING TRUE
-#include "realtime_tools/realtime_publisher.hpp"
+#include "rclcpp_lifecycle/lifecycle_publisher.hpp"
+#include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 
 namespace franka_robot_state_broadcaster {
 class FrankaRobotStateBroadcaster : public controller_interface::ControllerInterface {
  public:
-  // NOLINTBEGIN
   explicit FrankaRobotStateBroadcaster(
-      std::unique_ptr<franka_semantic_components::FrankaRobotState> franka_robot_state = nullptr)
-      : franka_robot_state_(std::move(franka_robot_state)){};
-  // NOLINTEND
+      std::unique_ptr<franka_semantic_components::FrankaRobotState> franka_robot_state = nullptr);
+
+  ~FrankaRobotStateBroadcaster() override;
+
+  static constexpr int kPublishThreadSleepUs = 200;
 
   controller_interface::InterfaceConfiguration command_interface_configuration() const override;
 
@@ -64,29 +63,7 @@ class FrankaRobotStateBroadcaster : public controller_interface::ControllerInter
 
   std::string state_interface_name{"robot_state"};
   std::shared_ptr<rclcpp::Publisher<franka_msgs::msg::FrankaRobotState>> franka_state_publisher;
-  
-  // override RealtimePublisher to customize the trylock behavior
-  class FrankaRobotStateRealtimePublisher
-      : public realtime_tools::RealtimePublisher<franka_msgs::msg::FrankaRobotState> {
-    using PublisherSharedPtr = rclcpp::Publisher<franka_msgs::msg::FrankaRobotState>::SharedPtr;
 
-   public:
-    // Constructor for the nested class
-    // NOLINTBEGIN
-    explicit FrankaRobotStateRealtimePublisher(PublisherSharedPtr publisher)
-        : realtime_tools::RealtimePublisher<franka_msgs::msg::FrankaRobotState>(
-              std::move(publisher)) {}
-    // NOLINTEND
-    // we only need to hide the trylock() method
-    bool trylock();
-    [[nodiscard]] int try_count() const { return try_count_; }
-
-   private:
-    const int try_count_ = 20;
-  };
-  // shared_ptr to object of override class
-  std::shared_ptr<FrankaRobotStateBroadcaster::FrankaRobotStateRealtimePublisher>
-      realtime_franka_state_publisher;
   std::shared_ptr<rclcpp::Publisher<geometry_msgs::msg::PoseStamped>>
       current_pose_stamped_publisher_;
   std::shared_ptr<rclcpp::Publisher<geometry_msgs::msg::WrenchStamped>>
@@ -95,6 +72,15 @@ class FrankaRobotStateBroadcaster : public controller_interface::ControllerInter
   const std::string kCurrentPoseTopic = "~/current_pose";
   const std::string kExternalWrenchInStiffnessFrame = "~/external_wrench_in_stiffness_frame";
   std::unique_ptr<franka_semantic_components::FrankaRobotState> franka_robot_state_;
+
+  AsyncBuffer<franka_msgs::msg::FrankaRobotState> state_buffer_;
+  std::thread publish_thread_;
+  std::atomic<bool> is_publish_thread_running_{false};
+  std::atomic<bool> data_ready_{false};
+
+  void startPublishThread();
+  void stopPublishThread();
+  void publishRunner();
 };
 
 }  // namespace franka_robot_state_broadcaster

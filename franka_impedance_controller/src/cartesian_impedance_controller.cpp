@@ -124,11 +124,9 @@ CartesianImpedanceController::CallbackReturn CartesianImpedanceController::on_co
   arm_id_ = get_node()->get_parameter("arm_id").as_string();
   auto robot_description = get_node()->get_parameter("robot_description").as_string();
   franka_robot_state_ = std::make_unique<franka_semantic_components::FrankaRobotState>(
-      franka_semantic_components::FrankaRobotState(arm_id_ + "/" + k_robot_state_interface_name,
-                                                   robot_description));
+      arm_id_ + "/" + k_robot_state_interface_name, robot_description);
   franka_robot_model_ = std::make_unique<franka_semantic_components::FrankaRobotModel>(
-      franka_semantic_components::FrankaRobotModel(arm_id_ + "/" + k_robot_model_interface_name,
-                                                   arm_id_ + "/" + k_robot_state_interface_name));
+      arm_id_ + "/" + k_robot_model_interface_name, arm_id_ + "/" + k_robot_state_interface_name);
   return CallbackReturn::SUCCESS;
 }
 
@@ -203,11 +201,12 @@ controller_interface::return_type CartesianImpedanceController::update(
 
   // compute control
   // allocate variables
-  Eigen::VectorXd tau_task(7), tau_nullspace(7), tau_d(7);
+  Eigen::Matrix<double, 7, 1> tau_task;
+  Eigen::Matrix<double, 7, 1> tau_nullspace;
+  Eigen::Matrix<double, 7, 1> tau_d;
 
   // pseudoinverse for nullspace handling
-  Eigen::MatrixXd jacobian_transpose_pinv;
-  jacobian_transpose_pinv = pseudoInverse(jacobian.transpose(), true);
+  Eigen::Matrix<double, 6, 7> jacobian_transpose_pinv = pseudoInverse(jacobian.transpose(), true);
 
   // Cartesian PD control with damping ratio = 1
   tau_task << jacobian.transpose() *
@@ -220,9 +219,12 @@ controller_interface::return_type CartesianImpedanceController::update(
   if (enable_nullspace_joints_ || enable_nullspace_joints_explore_) {
     Eigen::Matrix<double, 7, 1> q_error =
         enable_nullspace_joints_ ? q_d_nullspace_ - q : q_d_nullspace_explore_error_;
-    tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
-                      jacobian.transpose() * jacobian_transpose_pinv) *
-                         (nullspace_stiffness_ * q_error - (2.0 * sqrt(nullspace_stiffness_)) * dq);
+    Eigen::Matrix<double, 7, 7> nullspace_projector = Eigen::Matrix<double, 7, 7>::Identity();
+    nullspace_projector.noalias() -= jacobian.transpose() * jacobian_transpose_pinv;
+    Eigen::Matrix<double, 7, 1> nullspace_control;
+    nullspace_control.noalias() =
+        nullspace_stiffness_ * q_error - (2.0 * sqrt(nullspace_stiffness_)) * dq;
+    tau_nullspace.noalias() = nullspace_projector * nullspace_control;
     tau_d << tau_task + coriolis + tau_nullspace;
   } else {
     tau_d << tau_task + coriolis;
@@ -233,7 +235,10 @@ controller_interface::return_type CartesianImpedanceController::update(
   tau_d << saturateTorque(tau_d);
 
   for (int i = 0; i < num_joints; i++) {
-    command_interfaces_[i].set_value(tau_d[i]);
+    if (!command_interfaces_[i].set_value(tau_d[i])) {
+      RCLCPP_ERROR(get_node()->get_logger(), "Failed to set effort command interface value.");
+      return controller_interface::return_type::ERROR;
+    }
   }
 
   // update parameters changed online either through dynamic reconfigure or through the interactive

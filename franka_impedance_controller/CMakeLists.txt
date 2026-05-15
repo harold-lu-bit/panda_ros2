@@ -19,9 +19,12 @@ find_package(pluginlib REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(franka_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(rcl_interfaces REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Franka REQUIRED)
-find_package(franka_semantic_components)
+find_package(franka_semantic_components REQUIRED)
+find_package(std_msgs REQUIRED)
 
 add_library(
         ${PROJECT_NAME}
@@ -30,21 +33,33 @@ add_library(
 target_include_directories(
         ${PROJECT_NAME}
         PUBLIC
-        include
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
         ${EIGEN3_INCLUDE_DIRS}
+        ${franka_semantic_components_INCLUDE_DIRS}
 )
-ament_target_dependencies(
+target_link_libraries(
         ${PROJECT_NAME}
-        controller_interface
-        hardware_interface
-        pluginlib
-        rclcpp
-        rclcpp_lifecycle
-        franka_semantic_components
+        PUBLIC
+        Franka::Franka
+        ${franka_msgs_TARGETS}
+        ${geometry_msgs_TARGETS}
+        ${rcl_interfaces_TARGETS}
+        ${std_msgs_TARGETS}
+        ${franka_semantic_components_LIBRARIES}
+        controller_interface::controller_interface
+        hardware_interface::hardware_interface
+        pluginlib::pluginlib
+        rclcpp::rclcpp
+        rclcpp_lifecycle::rclcpp_lifecycle
 )
 
 if(${hardware_interface_VERSION} VERSION_GREATER_EQUAL "4.20")
     target_compile_definitions(${PROJECT_NAME} PRIVATE HW_HAS_SET_NODISCARD)
+endif()
+
+if(CMAKE_COMPILER_IS_GNUCXX)
+    target_compile_options(${PROJECT_NAME} PRIVATE -Wno-maybe-uninitialized)
 endif()
 
 pluginlib_export_plugin_description_file(
@@ -71,9 +86,14 @@ ament_export_libraries(
 )
 ament_export_dependencies(
         controller_interface
+        franka_msgs
+        franka_semantic_components
+        geometry_msgs
+        hardware_interface
         pluginlib
+        rcl_interfaces
         rclcpp
         rclcpp_lifecycle
-        hardware_interface
+        std_msgs
 )
 ament_package()

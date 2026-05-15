@@ -14,14 +14,13 @@
 
 #include "franka_robot_state_broadcaster/franka_robot_state_broadcaster.hpp"
 
-#include <cstddef>
-#include <limits>
-#include <memory>
-#include <string>
-#include <unordered_map>
-#include <vector>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
+#include <chrono>
+#include <memory>
+#include <string>
+#include <thread>
+#include <utility>
 
 #include "hardware_interface/types/hardware_interface_return_values.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
@@ -29,29 +28,75 @@
 #include "rclcpp/qos.hpp"
 #include "rclcpp/time.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
-#include "rcpputils/split.hpp"
 #include "rcutils/logging_macros.h"
-#include "std_msgs/msg/header.hpp"
-#include "geometry_msgs/msg/point.hpp"
-#include "geometry_msgs/msg/quaternion.hpp"
-#include "geometry_msgs/msg/vector3.hpp"
+
+namespace {
+
+geometry_msgs::msg::PoseStamped create_current_pose_stamped(
+    const franka_msgs::msg::FrankaRobotState& franka_state_msg,
+    const std::string& base_frame_name) {
+  const Eigen::Map<const Eigen::Matrix4d> transformation_matrix(franka_state_msg.o_t_ee.data());
+  const Eigen::Quaterniond quaternion(transformation_matrix.topLeftCorner<3, 3>());
+  const Eigen::Translation3d translation(transformation_matrix.block<3, 1>(0, 3));
+
+  geometry_msgs::msg::PoseStamped current_pose_stamped;
+  current_pose_stamped.header = franka_state_msg.header;
+  current_pose_stamped.header.frame_id = base_frame_name;
+  current_pose_stamped.pose.position.x = translation.x();
+  current_pose_stamped.pose.position.y = translation.y();
+  current_pose_stamped.pose.position.z = translation.z();
+  current_pose_stamped.pose.orientation.x = quaternion.x();
+  current_pose_stamped.pose.orientation.y = quaternion.y();
+  current_pose_stamped.pose.orientation.z = quaternion.z();
+  current_pose_stamped.pose.orientation.w = quaternion.w();
+  return current_pose_stamped;
+}
+
+geometry_msgs::msg::WrenchStamped create_external_wrench_in_stiffness_frame(
+    const franka_msgs::msg::FrankaRobotState& franka_state_msg,
+    const std::string& stiffness_frame_name) {
+  geometry_msgs::msg::WrenchStamped wrench_in_stiffness_frame;
+  wrench_in_stiffness_frame.header = franka_state_msg.header;
+  wrench_in_stiffness_frame.header.frame_id = stiffness_frame_name;
+  wrench_in_stiffness_frame.wrench.force.x = franka_state_msg.k_f_ext_hat_k.at(0);
+  wrench_in_stiffness_frame.wrench.force.y = franka_state_msg.k_f_ext_hat_k.at(1);
+  wrench_in_stiffness_frame.wrench.force.z = franka_state_msg.k_f_ext_hat_k.at(2);
+  wrench_in_stiffness_frame.wrench.torque.x = franka_state_msg.k_f_ext_hat_k.at(3);
+  wrench_in_stiffness_frame.wrench.torque.y = franka_state_msg.k_f_ext_hat_k.at(4);
+  wrench_in_stiffness_frame.wrench.torque.z = franka_state_msg.k_f_ext_hat_k.at(5);
+  return wrench_in_stiffness_frame;
+}
+
+}  // namespace
 
 namespace franka_robot_state_broadcaster {
 
-// Override trylock to customize the locking mechanism
-// You are excused for wondering why this is necessary.
-// RealtimePublisher::lock() isn't suitable for a 1kHz messaging system - it sleeps for 200
-// microseconds. RealtimePublisher::trylock() failure is highly likely due to the RCU >1kHz
-// publish rate. Here we basically force the scheduler to yield our thread, simultaneously
-// telling it reschedule us ASAP - hence not sleep_for(0) which doesn't necessarily yield.
-// After 10 attempts, we give up. Hopefully, the next call to update() will be successful.
-bool FrankaRobotStateBroadcaster::FrankaRobotStateRealtimePublisher::trylock() {
-  int count{0};
-  while (++count <= try_count_ &&
-         !realtime_tools::RealtimePublisher<franka_msgs::msg::FrankaRobotState>::trylock()) {
-    std::this_thread::sleep_for(std::chrono::microseconds(1));
+FrankaRobotStateBroadcaster::FrankaRobotStateBroadcaster(
+    std::unique_ptr<franka_semantic_components::FrankaRobotState> franka_robot_state)
+    : franka_robot_state_(std::move(franka_robot_state)) {}
+
+FrankaRobotStateBroadcaster::~FrankaRobotStateBroadcaster() {
+  stopPublishThread();
+}
+
+void FrankaRobotStateBroadcaster::startPublishThread() {
+  if (!is_publish_thread_running_) {
+    bool has_stale_data = false;
+    state_buffer_.get_active_buffer(has_stale_data);
+
+    data_ready_.store(false, std::memory_order_relaxed);
+    is_publish_thread_running_.store(true, std::memory_order_release);
+    publish_thread_ = std::thread(&FrankaRobotStateBroadcaster::publishRunner, this);
   }
-  return count <= try_count_;
+}
+
+void FrankaRobotStateBroadcaster::stopPublishThread() {
+  is_publish_thread_running_.store(false, std::memory_order_release);
+  data_ready_.store(true, std::memory_order_release);
+  if (publish_thread_.joinable()) {
+    publish_thread_.join();
+  }
+  data_ready_.store(false, std::memory_order_relaxed);
 }
 
 controller_interface::CallbackReturn FrankaRobotStateBroadcaster::on_init() {
@@ -89,8 +134,11 @@ controller_interface::CallbackReturn FrankaRobotStateBroadcaster::on_configure(
     RCLCPP_ERROR(get_node()->get_logger(), "Failed to get robot_description parameter");
     return CallbackReturn::ERROR;
   }
-  franka_robot_state_ = std::make_unique<franka_semantic_components::FrankaRobotState>(
-      franka_semantic_components::FrankaRobotState(params.arm_id + "/" + state_interface_name, robot_description));
+
+  if (!franka_robot_state_) {
+    franka_robot_state_ = std::make_unique<franka_semantic_components::FrankaRobotState>(
+        params.arm_id + "/" + state_interface_name, robot_description);
+  }
 
   current_pose_stamped_publisher_ = get_node()->create_publisher<geometry_msgs::msg::PoseStamped>(
       kCurrentPoseTopic, rclcpp::SystemDefaultsQoS());
@@ -100,10 +148,6 @@ controller_interface::CallbackReturn FrankaRobotStateBroadcaster::on_configure(
   try {
     franka_state_publisher = get_node()->create_publisher<franka_msgs::msg::FrankaRobotState>(
         "~/" + state_interface_name, rclcpp::SystemDefaultsQoS());
-    realtime_franka_state_publisher =
-        std::make_shared<FrankaRobotStateBroadcaster::FrankaRobotStateRealtimePublisher>(
-            franka_state_publisher);
-    ;
   } catch (const std::exception& e) {
     fprintf(stderr,
             "Exception thrown during publisher creation at configure stage with message : %s \n",
@@ -117,11 +161,13 @@ controller_interface::CallbackReturn FrankaRobotStateBroadcaster::on_configure(
 controller_interface::CallbackReturn FrankaRobotStateBroadcaster::on_activate(
     const rclcpp_lifecycle::State& /*previous_state*/) {
   franka_robot_state_->assign_loaned_state_interfaces(state_interfaces_);
+  startPublishThread();
   return CallbackReturn::SUCCESS;
 }
 
 controller_interface::CallbackReturn FrankaRobotStateBroadcaster::on_deactivate(
     const rclcpp_lifecycle::State& /*previous_state*/) {
+  stopPublishThread();
   franka_robot_state_->release_interfaces();
   return CallbackReturn::SUCCESS;
 }
@@ -129,55 +175,43 @@ controller_interface::CallbackReturn FrankaRobotStateBroadcaster::on_deactivate(
 controller_interface::return_type FrankaRobotStateBroadcaster::update(
     const rclcpp::Time& time,
     const rclcpp::Duration& /*period*/) {
-  if (!realtime_franka_state_publisher || !realtime_franka_state_publisher->trylock()) {
-    RCLCPP_WARN(get_node()->get_logger(),
-                 "Failed to lock the realtime publisher after %d attempts",
-                 realtime_franka_state_publisher->try_count());
-    return controller_interface::return_type::OK;
-  }
-  realtime_franka_state_publisher->msg_.header.stamp = time;
+  auto& franka_state_msg = state_buffer_.get_free_buffer();
+  franka_state_msg.header.stamp = time;
 
-  if (!franka_robot_state_->get_values_as_message(realtime_franka_state_publisher->msg_)) {
+  if (!franka_robot_state_->get_values_as_message(franka_state_msg)) {
     RCLCPP_ERROR(get_node()->get_logger(),
-                  "Failed to get franka state via franka state interface.");
-    realtime_franka_state_publisher->unlock();
+                 "Failed to get franka state via franka state interface.");
     return controller_interface::return_type::ERROR;
   }
 
-  realtime_franka_state_publisher->unlockAndPublish();
-  const auto& franka_state_msg = realtime_franka_state_publisher->msg_;
-
-  const Eigen::Map<const Eigen::Matrix4d> transformation_matrix(franka_state_msg.o_t_ee.data());
-  const Eigen::Quaterniond quaternion(transformation_matrix.topLeftCorner<3, 3>());
-  const Eigen::Translation3d translation(transformation_matrix.block<3, 1>(0, 3));
-  geometry_msgs::msg::PoseStamped current_pose_stamped;
-  current_pose_stamped.header.stamp = time;
-  current_pose_stamped.header.frame_id = franka_robot_state_->get_base_frame_name();
-  current_pose_stamped.pose.position = geometry_msgs::build<geometry_msgs::msg::Point>()
-    .x(translation.x())
-    .y(translation.y())
-    .z(translation.z());
-  current_pose_stamped.pose.orientation = geometry_msgs::build<geometry_msgs::msg::Quaternion>()
-    .x(quaternion.x())
-    .y(quaternion.y())
-    .z(quaternion.z())
-    .w(quaternion.w());
-  current_pose_stamped_publisher_->publish(current_pose_stamped);
-
-  geometry_msgs::msg::WrenchStamped wrench_in_stiffness_frame;
-  wrench_in_stiffness_frame.header.stamp = time;
-  wrench_in_stiffness_frame.header.frame_id = franka_robot_state_->get_stiffness_frame_name();
-  wrench_in_stiffness_frame.wrench.force = geometry_msgs::build<geometry_msgs::msg::Vector3>()
-    .x(franka_state_msg.k_f_ext_hat_k.at(0))
-    .y(franka_state_msg.k_f_ext_hat_k.at(1))
-    .z(franka_state_msg.k_f_ext_hat_k.at(2));
-  wrench_in_stiffness_frame.wrench.torque = geometry_msgs::build<geometry_msgs::msg::Vector3>()
-    .x(franka_state_msg.k_f_ext_hat_k.at(3))
-    .y(franka_state_msg.k_f_ext_hat_k.at(4))
-    .z(franka_state_msg.k_f_ext_hat_k.at(5));
-  external_wrench_in_stiffness_frame_publisher_->publish(wrench_in_stiffness_frame);
+  state_buffer_.commit_free_buffer();
+  data_ready_.store(true, std::memory_order_release);
 
   return controller_interface::return_type::OK;
+}
+
+void FrankaRobotStateBroadcaster::publishRunner() {
+  while (is_publish_thread_running_.load(std::memory_order_acquire)) {
+    if (!data_ready_.load(std::memory_order_acquire)) {
+      std::this_thread::sleep_for(std::chrono::microseconds(kPublishThreadSleepUs));
+      continue;
+    }
+    data_ready_.store(false, std::memory_order_relaxed);
+
+    bool has_new_data = false;
+    auto& franka_state_msg = state_buffer_.get_active_buffer(has_new_data);
+    if (!has_new_data) {
+      continue;
+    }
+
+    franka_state_publisher->publish(franka_state_msg);
+
+    current_pose_stamped_publisher_->publish(
+        create_current_pose_stamped(franka_state_msg, franka_robot_state_->get_base_frame_name()));
+    external_wrench_in_stiffness_frame_publisher_->publish(
+        create_external_wrench_in_stiffness_frame(franka_state_msg,
+                                                  franka_robot_state_->get_stiffness_frame_name()));
+  }
 }
 
 }  // namespace franka_robot_state_broadcaster

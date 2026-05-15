@@ -30,6 +30,7 @@ def generate_launch_description():
     robot_ip_parameter_name = 'robot_ip'
     use_arm_id_as_ns_parameter_name = 'use_arm_id_as_ns'
     load_gripper_parameter_name = 'load_gripper'
+    start_gripper_action_server_parameter_name = 'start_gripper_action_server'
     controllers_file_parameter_name = 'controllers_file'
     use_fake_hardware_parameter_name = 'use_fake_hardware'
     fake_sensor_commands_parameter_name = 'fake_sensor_commands'
@@ -39,6 +40,7 @@ def generate_launch_description():
     arm_id = LaunchConfiguration(arm_id_parameter_name)
     robot_ip = LaunchConfiguration(robot_ip_parameter_name)
     load_gripper = LaunchConfiguration(load_gripper_parameter_name)
+    start_gripper_action_server = LaunchConfiguration(start_gripper_action_server_parameter_name)
     use_arm_id_as_ns = LaunchConfiguration(use_arm_id_as_ns_parameter_name)
     controllers_file = LaunchConfiguration(controllers_file_parameter_name)
     use_fake_hardware = LaunchConfiguration(use_fake_hardware_parameter_name)
@@ -114,6 +116,10 @@ def generate_launch_description():
             description='Use Franka Gripper as an end-effector, otherwise, the robot is loaded '
                         'without an end-effector.'),
         DeclareLaunchArgument(
+            start_gripper_action_server_parameter_name,
+            default_value='true',
+            description='Start the legacy action-based Franka gripper node.'),
+        DeclareLaunchArgument(
             publish_description_name,
             default_value='true',
             description='Publish the robot description through topic.'),
@@ -175,7 +181,9 @@ def generate_launch_description():
                 "namespace": namespace,
                 "joint_names": joint_names,
             }.items(),
-            condition=IfCondition(load_gripper)
+            condition=IfCondition(PythonExpression(
+                ["'", load_gripper, "' == 'true' and '", start_gripper_action_server, "' == 'true'"]
+            ))
         ),
 
         Node(package='rviz2',

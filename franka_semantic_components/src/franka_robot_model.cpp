@@ -16,6 +16,7 @@
 
 #include <cstring>
 #include <iostream>
+#include <optional>
 #include "rclcpp/logging.hpp"
 namespace {
 
@@ -60,12 +61,17 @@ void FrankaRobotModel::initialize() {
 
   if (franka_state_interface != state_interfaces_.end() &&
       franka_model_interface != state_interfaces_.end()) {
-    robot_model = bit_cast<franka_hardware::Model*>((*franka_model_interface).get().get_value());
-    robot_state = bit_cast<franka::RobotState*>((*franka_state_interface).get().get_value());
+    const std::optional<double> robot_model_value = (*franka_model_interface).get().get_optional();
+    const std::optional<double> robot_state_value = (*franka_state_interface).get().get_optional();
+    if (!robot_model_value.has_value() || !robot_state_value.has_value()) {
+      throw std::runtime_error("Franka state interfaces could not be read");
+    }
+    robot_model = bit_cast<franka_hardware::Model*>(robot_model_value.value());
+    robot_state = bit_cast<franka::RobotState*>(robot_state_value.value());
   } else {
     RCLCPP_ERROR(rclcpp::get_logger("franka_model_semantic_component"),
                  "Franka interface does not %s/%s exist! Did you assign the loaned state in the "
-                 "controller?", 
+                 "controller?",
                  franka_model_interface_name_.c_str(), franka_state_interface_name_.c_str());
     throw std::runtime_error("Franka state interfaces does not exist");
   }

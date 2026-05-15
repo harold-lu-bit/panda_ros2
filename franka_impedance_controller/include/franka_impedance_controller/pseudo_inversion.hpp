@@ -4,18 +4,27 @@
 
 namespace franka_impedance_controller {
 
-inline Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& M_, bool damped = true) {
-  double lambda_ = damped ? 0.2 : 0.0;
+inline Eigen::Matrix<double, 6, 7> pseudoInverse(
+    const Eigen::Ref<const Eigen::Matrix<double, 7, 6>>& matrix,
+    bool damped = true) {
+  const double lambda = damped ? 0.2 : 0.0;
 
-  Eigen::JacobiSVD<Eigen::MatrixXd> svd(M_, Eigen::ComputeFullU | Eigen::ComputeFullV);
-  Eigen::JacobiSVD<Eigen::MatrixXd>::SingularValuesType sing_vals_ = svd.singularValues();
-  Eigen::MatrixXd S_ = M_;  // copying the dimensions of M_, its content is not needed.
-  S_.setZero();
+  Eigen::JacobiSVD<Eigen::Matrix<double, 7, 6>> svd(matrix,
+                                                    Eigen::ComputeFullU | Eigen::ComputeFullV);
+  Eigen::Matrix<double, 6, 7> singular_values_inverse = Eigen::Matrix<double, 6, 7>::Zero();
 
-  for (int i = 0; i < sing_vals_.size(); i++)
-    S_(i, i) = (sing_vals_(i)) / (sing_vals_(i) * sing_vals_(i) + lambda_ * lambda_);
+  for (Eigen::Index i = 0; i < svd.singularValues().size(); ++i) {
+    const double singular_value = svd.singularValues()(i);
+    singular_values_inverse(i, i) =
+        singular_value / (singular_value * singular_value + lambda * lambda);
+  }
 
-  return svd.matrixV() * S_.transpose() * svd.matrixU().transpose();
+  Eigen::Matrix<double, 6, 7> v_times_singular_values_inverse;
+  v_times_singular_values_inverse.noalias() = svd.matrixV() * singular_values_inverse;
+
+  Eigen::Matrix<double, 6, 7> pseudo_inverse;
+  pseudo_inverse.noalias() = v_times_singular_values_inverse * svd.matrixU().transpose();
+  return pseudo_inverse;
 }
 
 }  // namespace franka_impedance_controller

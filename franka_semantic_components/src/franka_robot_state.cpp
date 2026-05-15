@@ -40,8 +40,8 @@ bit_cast(const From& src) noexcept {
 }
 
 bool endsWith(const std::string& str, const std::string& suffix) {
-    return str.size() >= suffix.size() && 
-           str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
+  return str.size() >= suffix.size() &&
+         str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
 franka_msgs::msg::Errors errorsToMessage(const franka::Errors& error) {
@@ -196,14 +196,15 @@ auto FrankaRobotState::get_robot_name_from_urdf() -> std::string {
   const std::string suffix = "_link0";
   for (const auto& pair : model_->links_) {
     if (endsWith(pair.first, suffix)) {
-      return pair.first.substr(0, pair.first.size() - suffix.size());;
+      return pair.first.substr(0, pair.first.size() - suffix.size());
+      ;
     }
   }
   RCLCPP_ERROR(rclcpp::get_logger("franka_state_semantic_component"),
-                "URDF string dose not contain any link with the suffix %s. "
-                "Use default robot name %s instead. "
-                "Did you assign the right URDF string?",
-                suffix.c_str(), model_->name_.c_str());
+               "URDF string dose not contain any link with the suffix %s. "
+               "Use default robot name %s instead. "
+               "Did you assign the right URDF string?",
+               suffix.c_str(), model_->name_.c_str());
   return model_->name_;
 }
 
@@ -251,7 +252,13 @@ bool FrankaRobotState::get_values_as_message(franka_msgs::msg::FrankaRobotState&
                    });
 
   if (franka_state_interface != state_interfaces_.end()) {
-    robot_state_ptr = bit_cast<franka::RobotState*>((*franka_state_interface).get().get_value());
+    const std::optional<double> robot_state_value = (*franka_state_interface).get().get_optional();
+    if (!robot_state_value.has_value()) {
+      RCLCPP_ERROR(rclcpp::get_logger("franka_state_semantic_component"),
+                   "Franka state interface could not be read.");
+      return false;
+    }
+    robot_state_ptr = bit_cast<franka::RobotState*>(robot_state_value.value());
   } else {
     RCLCPP_ERROR(rclcpp::get_logger("franka_state_semantic_component"),
                  "Franka state interface does not exist! Did you assign the loaned state in the "

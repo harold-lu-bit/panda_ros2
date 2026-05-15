@@ -82,4 +82,7 @@ class MoveToStartExampleControllerTest : public ::testing::Test {
   StateInterface joint_5_vel_state_{joint_names_[4], HW_IF_VELOCITY, &joint_dq_state_[4]};
   StateInterface joint_6_vel_state_{joint_names_[5], HW_IF_VELOCITY, &joint_dq_state_[5]};
   StateInterface joint_7_vel_state_{joint_names_[6], HW_IF_VELOCITY, &joint_dq_state_[6]};
+
+  std::vector<CommandInterface::SharedPtr> command_interface_storage_;
+  std::vector<StateInterface::ConstSharedPtr> state_interface_storage_;
 };

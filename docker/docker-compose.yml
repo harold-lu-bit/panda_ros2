@@ -1,23 +1,25 @@
-name: panda_ros2_jazzy
+name: panda_ros2
 services:
-  panda_ros2_jazzy:
+  panda_ros2:
     build:
       context: .
       dockerfile: Dockerfile
-      network: "host"
+      network: host
+      secrets: [sudo_password]
       args:
         - USER_UID=${USER_UID:?error}
         - USER_GID=${USER_GID:?error}
-        - USERNAME=${USERNAME:?error}
-    container_name: panda_ros2_jazzy
+        - USER_NAME=${USER_NAME:?error}
+        - TZ=${TZ:?error}
+    container_name: panda_ros2
     stdin_open: true
     tty: true
-    network_mode: "host"
+    command: [sleep, infinity]
+    network_mode: host
     privileged: true
     ipc: host
-    entrypoint: ["/inin_entrypoint.sh"]
-    # set default args of workspace
-    command: bash -c "ln -sf /workspace/ros2_ws/src/panda_ros2/docker/colcon_defaults.yaml /workspace/ros2_ws/colcon_defaults.yaml && tail -f /dev/null"
+    # for gui on machine with nvidia gpu
+    runtime: nvidia
     environment:
       # ----- GUI support -----
       DISPLAY: ${DISPLAY:?error}
@@ -38,25 +40,21 @@ services:
       ROS_AUTOMATIC_DISCOVERY_RANGE: ${ROS_AUTOMATIC_DISCOVERY_RANGE:?error}
     volumes:
       - ../:/workspace/ros2_ws/src/panda_ros2
-      - ./limits.conf:/etc/security/limits.conf
+      - ./ws-config/vscode-config:/workspace/ros2_ws/.vscode
+      - ./ws-config/colcon_defaults.yaml:/workspace/ros2_ws/colcon_defaults.yaml
+      - ./ws-config/AGENTS.md:/workspace/ros2_ws/AGENTS.md
 
       # for using gui through x11
       - /tmp/.X11-unix:/tmp/.X11-unix
       # wayland socket & XAUTHORITY
       - ${XDG_RUNTIME_DIR:?error}:/tmp/runtime_dir
 
-      - /dev:/dev
-      - cache-vscode_server:/home/${USERNAME:?error}/.vscode-server
-      - cache-home_cache:/home/${USERNAME:?error}/.cache
-    device_cgroup_rules:
-      # D405 video4linux
-      - 'c 81:* rmw'
-      # spacemouse
-      - 'c 5:* rmw'
-      - 'c 239:* rmw'
+      - cache-vscode_server:/home/${USER_NAME:?error}/.vscode-server
+      - cache-home_cache:/home/${USER_NAME:?error}/.cache
     # for real-time capabilities
     cap_add:
       - SYS_NICE
+      - IPC_LOCK
     ulimits:
       rtprio: 99
       rttime: -1

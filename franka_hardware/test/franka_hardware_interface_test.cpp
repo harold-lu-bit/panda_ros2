@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <gmock/gmock.h>
+#include <cstring>
 #include <exception>
 #include <rclcpp/rclcpp.hpp>
 
@@ -21,6 +22,7 @@
 #include <franka_hardware/robot.hpp>
 
 #include <hardware_interface/hardware_info.hpp>
+#include <hardware_interface/types/hardware_component_interface_params.hpp>
 #include <hardware_interface/types/hardware_interface_return_values.hpp>
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 
@@ -30,6 +32,14 @@ const std::string k_effort_controller{"effort"};
 const std::string k_joint_name{"joint"};
 const size_t k_number_of_joints{7};
 const double k_EPS{1e-5};
+
+template <typename T>
+double pointerValueAsDouble(T* pointer) {
+  double value = 0.0;
+  static_assert(sizeof(value) == sizeof(pointer));
+  std::memcpy(&value, &pointer, sizeof(value));
+  return value;
+}
 
 class MockModel : public franka_hardware::Model {};
 
@@ -74,11 +84,17 @@ auto createHardwareInfo() -> hardware_interface::HardwareInfo {
   return info;
 }
 
+auto createHardwareComponentInterfaceParams()
+    -> hardware_interface::HardwareComponentInterfaceParams {
+  hardware_interface::HardwareComponentInterfaceParams params;
+  params.hardware_info = createHardwareInfo();
+  return params;
+}
+
 TEST(FrankaHardwareInterfaceTest, when_on_init_called_expect_success) {
   auto mock_robot = std::make_unique<MockRobot>();
-  const hardware_interface::HardwareInfo info = createHardwareInfo();
   franka_hardware::FrankaHardwareInterface franka_hardware_interface(std::move(mock_robot));
-  auto return_type = franka_hardware_interface.on_init(info);
+  auto return_type = franka_hardware_interface.on_init(createHardwareComponentInterfaceParams());
 
   EXPECT_EQ(return_type,
             rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS);
@@ -115,8 +131,7 @@ TEST(
   EXPECT_CALL(*mock_robot, read()).WillOnce(testing::Return(robot_state));
   franka_hardware::FrankaHardwareInterface franka_hardware_interface(std::move(mock_robot));
 
-  const auto hardware_info = createHardwareInfo();
-  franka_hardware_interface.on_init(hardware_info);
+  franka_hardware_interface.on_init(createHardwareComponentInterfaceParams());
   auto time = rclcpp::Time(0);
   auto duration = rclcpp::Duration(0, 0);
   auto return_type = franka_hardware_interface.read(time, duration);
@@ -139,7 +154,7 @@ TEST(
     }
 #ifdef HW_HAS_GET_BY_REF
     double val = 0;
-    EXPECT_TRUE(states[i].get_value(val));
+    EXPECT_TRUE(states[i].get_value(val, true));
 #else
     const double val = states[i].get_value();
 #endif
@@ -164,8 +179,7 @@ TEST(
   EXPECT_CALL(*mock_robot, getModel()).WillOnce(testing::Return(model_address));
   franka_hardware::FrankaHardwareInterface franka_hardware_interface(std::move(mock_robot));
 
-  const auto hardware_info = createHardwareInfo();
-  franka_hardware_interface.on_init(hardware_info);
+  franka_hardware_interface.on_init(createHardwareComponentInterfaceParams());
   auto time = rclcpp::Time(0);
   auto duration = rclcpp::Duration(0, 0);
   auto return_type = franka_hardware_interface.read(time, duration);
@@ -175,11 +189,11 @@ TEST(
             "panda/robot_model");  // Last state interface is the robot model state
 #ifdef HW_HAS_GET_BY_REF
   double val = 0;
-  EXPECT_TRUE(states[state_interface_size - 1].get_value(val));
+  EXPECT_TRUE(states[state_interface_size - 1].get_value(val, true));
 #else
   const double val = states[state_interface_size - 1].get_value();
 #endif
-  EXPECT_NEAR(val, *reinterpret_cast<double*>(&model_address),
+  EXPECT_NEAR(val, pointerValueAsDouble(model_address),
               k_EPS);  // testing that the casted mock_model ptr
                        // is correctly pushed to state interface
 }
@@ -201,8 +215,7 @@ TEST(
   EXPECT_CALL(*mock_robot, getModel()).WillOnce(testing::Return(model_address));
   franka_hardware::FrankaHardwareInterface franka_hardware_interface(std::move(mock_robot));
 
-  const auto hardware_info = createHardwareInfo();
-  franka_hardware_interface.on_init(hardware_info);
+  franka_hardware_interface.on_init(createHardwareComponentInterfaceParams());
   auto time = rclcpp::Time(0);
   auto duration = rclcpp::Duration(0, 0);
   auto return_type = franka_hardware_interface.read(time, duration);
@@ -212,11 +225,11 @@ TEST(
             "panda/robot_state");  // Last state interface is the robot model state
 #ifdef HW_HAS_GET_BY_REF
   double val = 0;
-  EXPECT_TRUE(states[state_interface_size - 2].get_value(val));
+  EXPECT_TRUE(states[state_interface_size - 2].get_value(val, true));
 #else
   const double val = states[state_interface_size - 2].get_value();
 #endif
-  EXPECT_NEAR(val, *reinterpret_cast<double*>(&robot_state_address),
+  EXPECT_NEAR(val, pointerValueAsDouble(robot_state_address),
               k_EPS);  // testing that the casted robot state ptr
                        // is correctly pushed to state interface
 }
@@ -227,7 +240,7 @@ TEST(FrankaHardwareInterfaceTest,
   franka_hardware::FrankaHardwareInterface franka_hardware_interface(std::move(mock_robot));
 
   const auto hardware_info = createHardwareInfo();
-  franka_hardware_interface.on_init(hardware_info);
+  franka_hardware_interface.on_init(createHardwareComponentInterfaceParams());
   std::vector<std::string> stop_interface;
 
   for (size_t i = 0; i < hardware_info.joints.size(); i++) {
@@ -246,7 +259,7 @@ TEST(
   franka_hardware::FrankaHardwareInterface franka_hardware_interface(std::move(mock_robot));
 
   const auto hardware_info = createHardwareInfo();
-  franka_hardware_interface.on_init(hardware_info);
+  franka_hardware_interface.on_init(createHardwareComponentInterfaceParams());
   std::vector<std::string> stop_interface;
 
   for (size_t i = 0; i < hardware_info.joints.size(); i++) {
@@ -265,7 +278,7 @@ TEST(FrankaHardwareInterfaceTest,
   franka_hardware::FrankaHardwareInterface franka_hardware_interface(std::move(mock_robot));
 
   const auto hardware_info = createHardwareInfo();
-  franka_hardware_interface.on_init(hardware_info);
+  franka_hardware_interface.on_init(createHardwareComponentInterfaceParams());
   std::vector<std::string> start_interface;
 
   for (size_t i = 0; i < hardware_info.joints.size(); i++) {
@@ -286,7 +299,7 @@ TEST(
   franka_hardware::FrankaHardwareInterface franka_hardware_interface(std::move(mock_robot));
 
   const auto hardware_info = createHardwareInfo();
-  franka_hardware_interface.on_init(hardware_info);
+  franka_hardware_interface.on_init(createHardwareComponentInterfaceParams());
   std::vector<std::string> start_interface;
 
   for (size_t i = 0; i < hardware_info.joints.size(); i++) {
@@ -305,8 +318,7 @@ TEST(FrankaHardwareIntefaceTest, when_write_called_expect_ok) {
   auto mock_robot = std::make_unique<MockRobot>();
   franka_hardware::FrankaHardwareInterface franka_hardware_interface(std::move(mock_robot));
 
-  const auto hardware_info = createHardwareInfo();
-  franka_hardware_interface.on_init(hardware_info);
+  franka_hardware_interface.on_init(createHardwareComponentInterfaceParams());
 
   const auto time = rclcpp::Time(0, 0);
   const auto duration = rclcpp::Duration(0, 0);
@@ -353,7 +365,7 @@ TEST(FrankaHardwareInterfaceTest,
   franka_hardware::FrankaHardwareInterface franka_hardware_interface(std::move(mock_robot));
 
   const auto hardware_info = createHardwareInfo();
-  franka_hardware_interface.on_init(hardware_info);
+  franka_hardware_interface.on_init(createHardwareComponentInterfaceParams());
   std::vector<std::string> start_interface;
 
   for (size_t i = 0; i < hardware_info.joints.size(); i++) {
@@ -380,7 +392,7 @@ TEST(FrankaHardwareInterfaceTest,
   franka_hardware::FrankaHardwareInterface franka_hardware_interface(std::move(mock_robot));
 
   const auto hardware_info = createHardwareInfo();
-  franka_hardware_interface.on_init(hardware_info);
+  franka_hardware_interface.on_init(createHardwareComponentInterfaceParams());
   std::vector<std::string> start_interface;
 
   for (size_t i = 0; i < hardware_info.joints.size(); i++) {
@@ -411,6 +423,9 @@ TEST(FrankaHardwareInterfaceTest,
 }
 
 int main(int argc, char** argv) {
+  rclcpp::init(argc, argv);
   testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+  const auto result = RUN_ALL_TESTS();
+  rclcpp::shutdown();
+  return result;
 }

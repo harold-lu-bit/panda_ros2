@@ -18,7 +18,7 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include "urdf/model.h"
+#include "urdf/model.hpp"
 
 #include "franka/robot_state.h"
 #include "franka_msgs/msg/errors.hpp"
@@ -43,7 +43,7 @@ class FrankaRobotState
    * @brief Get the the base frame_id
    *
    * @return std::string Name of the base frame
-  */
+   */
   auto get_base_frame_name() const -> std::string;
 
   /**

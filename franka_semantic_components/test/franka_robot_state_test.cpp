@@ -20,6 +20,7 @@
 
 void FrankaRobotStateTest::TearDown() {
   franka_state_friend.reset(nullptr);
+  state_interface_storage.clear();
 }
 
 void FrankaRobotStateTest::SetUp() {
@@ -35,13 +36,15 @@ void FrankaRobotStateTest::SetUp() {
   robot_state.O_T_EE = end_effector_pose;
   robot_state.robot_mode = robot_mode;
 
-  hardware_interface::StateInterface franka_hw_state{
-      robot_name, franka_state_interface_name, reinterpret_cast<double*>(&robot_state_address)};
   std::vector<hardware_interface::LoanedStateInterface> temp_state_interfaces;
+  state_interface_storage.clear();
+  state_interface_storage.reserve(size);
+  state_interface_storage.emplace_back(std::make_shared<hardware_interface::StateInterface>(
+      robot_name, franka_state_interface_name, reinterpret_cast<double*>(&robot_state_address)));
 
   temp_state_interfaces.reserve(size);
 
-  temp_state_interfaces.emplace_back(franka_hw_state);
+  temp_state_interfaces.emplace_back(state_interface_storage[0]);
   franka_state_friend->assign_loaned_state_interfaces(temp_state_interfaces);
   ASSERT_TRUE(franka_state_friend->get_values_as_message(franka_robot_state_msg));
 }

@@ -82,6 +82,7 @@ class FrankaRobotModelTest : public ::testing::Test {
  public:
   void SetUp();
   void TearDown();
+  auto createLoanedStateInterfaces() -> std::vector<hardware_interface::LoanedStateInterface>;
 
  protected:
   const size_t size = 2;
@@ -98,4 +99,5 @@ class FrankaRobotModelTest : public ::testing::Test {
   std::unique_ptr<FrankaRobotModelTestFriend> franka_robot_model_friend;
 
   std::vector<std::string> full_interface_names;
+  std::vector<hardware_interface::StateInterface::ConstSharedPtr> state_interface_storage;
 };

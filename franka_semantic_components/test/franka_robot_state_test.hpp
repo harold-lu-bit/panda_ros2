@@ -18,9 +18,6 @@
 #include <string>
 #include <vector>
 
-#include <ament_index_cpp/get_package_share_directory.hpp>
-#include <fstream>
-#include <sstream>
 #include "franka/robot_state.h"
 #include "franka_semantic_components/franka_robot_state.hpp"
 #include "gmock/gmock.h"
@@ -35,26 +32,74 @@ class FrankaRobotStateTestFriend : public franka_semantic_components::FrankaRobo
  public:
   // Use generation of interface names
   explicit FrankaRobotStateTestFriend(const std::string& name)
-      : franka_semantic_components::FrankaRobotState(
-            name,
-            get_robot_description("franka_semantic_components")) {}
+      : franka_semantic_components::FrankaRobotState(name, get_robot_description()) {}
 
   virtual ~FrankaRobotStateTestFriend() = default;
 
  private:
-  static std::string get_robot_description(const std::string& package_name) {
-    std::string package_path = ament_index_cpp::get_package_share_directory(package_name);
-    std::string file_path = package_path + "/robot_description_test.txt";
-
-    std::ifstream file(file_path);
-    if (!file) {
-      throw std::runtime_error("Failed to open file: " + file_path);
-    }
-
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-
-    return buffer.str();
+  static std::string get_robot_description() {
+    return R"(
+<?xml version="1.0"?>
+<robot name="panda">
+  <link name="panda_link0"/>
+  <link name="panda_link1"/>
+  <link name="panda_link2"/>
+  <link name="panda_link3"/>
+  <link name="panda_link4"/>
+  <link name="panda_link5"/>
+  <link name="panda_link6"/>
+  <link name="panda_link7"/>
+  <link name="panda_link8"/>
+  <joint name="panda_joint1" type="revolute">
+    <parent link="panda_link0"/>
+    <child link="panda_link1"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
+  </joint>
+  <joint name="panda_joint2" type="revolute">
+    <parent link="panda_link1"/>
+    <child link="panda_link2"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
+  </joint>
+  <joint name="panda_joint3" type="revolute">
+    <parent link="panda_link2"/>
+    <child link="panda_link3"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
+  </joint>
+  <joint name="panda_joint4" type="revolute">
+    <parent link="panda_link3"/>
+    <child link="panda_link4"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
+  </joint>
+  <joint name="panda_joint5" type="revolute">
+    <parent link="panda_link4"/>
+    <child link="panda_link5"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
+  </joint>
+  <joint name="panda_joint6" type="revolute">
+    <parent link="panda_link5"/>
+    <child link="panda_link6"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
+  </joint>
+  <joint name="panda_joint7" type="revolute">
+    <parent link="panda_link6"/>
+    <child link="panda_link7"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
+  </joint>
+  <joint name="panda_joint8" type="revolute">
+    <parent link="panda_link7"/>
+    <child link="panda_link8"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
+  </joint>
+</robot>
+)";
   }
 };
 
@@ -81,4 +126,5 @@ class FrankaRobotStateTest : public ::testing::Test {
   std::unique_ptr<FrankaRobotStateTestFriend> franka_state_friend;
 
   std::vector<std::string> full_interface_names;
+  std::vector<hardware_interface::StateInterface::ConstSharedPtr> state_interface_storage;
 };

@@ -18,6 +18,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "test_move_to_start_example_controller.hpp"
 
+#include "controller_interface/controller_interface_params.hpp"
 #include "hardware_interface/handle.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "rclcpp/utilities.hpp"
@@ -27,12 +28,7 @@
 const double k_EPS = 1e-5;
 
 void exp_val_near(const CommandInterface& cmdintf) {
-#ifdef HW_HAS_GET_BY_REF
-  double val = 0;
-  EXPECT_TRUE(cmdintf.get_value(val));
-#else
-  const double val = cmdintf.get_value();
-#endif
+  const double val = cmdintf.get_optional().value();
   EXPECT_NEAR(val, 0.0, k_EPS);
 }
 
@@ -50,44 +46,43 @@ void MoveToStartExampleControllerTest::SetUp() {
 
 void MoveToStartExampleControllerTest::TearDown() {
   controller_.reset(nullptr);
+  command_interface_storage_.clear();
+  state_interface_storage_.clear();
 }
 
 void MoveToStartExampleControllerTest::SetUpController() {
-  const auto result = controller_->init(
-    "test_move_to_start_example"
-#if controller_interface_VERSION_MAJOR >= 4
-    , ros2_control_test_assets::minimal_robot_urdf      // urdf
-    , 0                                                 // cm_update_rate
-    , {}                                                // node_namespace
-    , rclcpp::NodeOptions().enable_logger_service(true) // node_options
-#endif
-  );
+  controller_interface::ControllerInterfaceParams params;
+  params.controller_name = "test_move_to_start_example";
+  params.robot_description = ros2_control_test_assets::minimal_robot_urdf;
+  params.controller_manager_update_rate = 0;
+  params.node_namespace = {};
+  params.node_options = rclcpp::NodeOptions().enable_logger_service(true);
+  const auto result = controller_->init(params);
   ASSERT_EQ(result, controller_interface::return_type::OK);
   std::vector<LoanedCommandInterface> command_ifs;
   std::vector<LoanedStateInterface> state_ifs;
 
-  command_ifs.emplace_back(joint_1_pos_cmd_);
-  command_ifs.emplace_back(joint_2_pos_cmd_);
-  command_ifs.emplace_back(joint_3_pos_cmd_);
-  command_ifs.emplace_back(joint_4_pos_cmd_);
-  command_ifs.emplace_back(joint_5_pos_cmd_);
-  command_ifs.emplace_back(joint_6_pos_cmd_);
-  command_ifs.emplace_back(joint_7_pos_cmd_);
+  command_interface_storage_.clear();
+  command_interface_storage_.reserve(joint_commands_.size());
+  for (auto i = 0U; i < joint_commands_.size(); ++i) {
+    command_interface_storage_.emplace_back(
+        std::make_shared<CommandInterface>(joint_names_[i], HW_IF_EFFORT, &joint_commands_[i]));
+  }
+  for (const auto& command_interface : command_interface_storage_) {
+    command_ifs.emplace_back(command_interface);
+  }
 
-  state_ifs.emplace_back(joint_1_pos_state_);
-  state_ifs.emplace_back(joint_1_vel_state_);
-  state_ifs.emplace_back(joint_2_pos_state_);
-  state_ifs.emplace_back(joint_2_vel_state_);
-  state_ifs.emplace_back(joint_3_pos_state_);
-  state_ifs.emplace_back(joint_3_vel_state_);
-  state_ifs.emplace_back(joint_4_pos_state_);
-  state_ifs.emplace_back(joint_4_vel_state_);
-  state_ifs.emplace_back(joint_5_pos_state_);
-  state_ifs.emplace_back(joint_5_vel_state_);
-  state_ifs.emplace_back(joint_6_pos_state_);
-  state_ifs.emplace_back(joint_6_vel_state_);
-  state_ifs.emplace_back(joint_7_pos_state_);
-  state_ifs.emplace_back(joint_7_vel_state_);
+  state_interface_storage_.clear();
+  state_interface_storage_.reserve(joint_q_state_.size() + joint_dq_state_.size());
+  for (auto i = 0U; i < joint_q_state_.size(); ++i) {
+    state_interface_storage_.emplace_back(
+        std::make_shared<StateInterface>(joint_names_[i], HW_IF_POSITION, &joint_q_state_[i]));
+    state_interface_storage_.emplace_back(
+        std::make_shared<StateInterface>(joint_names_[i], HW_IF_VELOCITY, &joint_dq_state_[i]));
+  }
+  for (const auto& state_interface : state_interface_storage_) {
+    state_ifs.emplace_back(state_interface);
+  }
 
   controller_->assign_interfaces(std::move(command_ifs), std::move(state_ifs));
 }

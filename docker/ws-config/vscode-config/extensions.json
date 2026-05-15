@@ -1,0 +1,11 @@
+{
+    "recommendations": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "shd101wyy.markdown-preview-enhanced",
+        "xaver.clang-format",
+        "mikeburgh.xml-format",
+        "charliermarsh.ruff",
+        "tatsy.vscode-3d-preview"
+    ]
+}

@@ -11,11 +11,15 @@
 
   <depend>rclcpp</depend>
   <depend>controller_interface</depend>
-  <depend>pluginlib</depend>
-  <depend>rclcpp_lifecycle</depend>
   <depend>franka_msgs</depend>
   <depend>franka_semantic_components</depend>
+  <depend>geometry_msgs</depend>
+  <depend>hardware_interface</depend>
+  <depend>pluginlib</depend>
+  <depend>rcl_interfaces</depend>
+  <depend>rclcpp_lifecycle</depend>
   <depend>generate_parameter_library</depend>
+  <depend>std_msgs</depend>
 
   <build_depend>eigen</build_depend>
 

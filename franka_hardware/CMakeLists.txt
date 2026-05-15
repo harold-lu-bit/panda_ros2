@@ -34,14 +34,16 @@ target_include_directories(
         PRIVATE
         include
 )
-ament_target_dependencies(
+target_link_libraries(
         franka_hardware
-        hardware_interface
-        Franka
-        pluginlib
-        rclcpp
-        rclcpp_action
-        franka_msgs
+        PUBLIC
+        Franka::Franka
+        ${franka_msgs_TARGETS}
+        hardware_interface::hardware_interface
+        hardware_interface::mock_components
+        pluginlib::pluginlib
+        rclcpp::rclcpp
+        rclcpp_action::rclcpp_action
 )
 pluginlib_export_plugin_description_file(hardware_interface franka_hardware.xml)
 

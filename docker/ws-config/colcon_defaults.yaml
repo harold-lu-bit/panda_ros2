@@ -3,6 +3,4 @@ build:
   
   cmake-args:
     - "-DCMAKE_BUILD_TYPE=Release"
-    # turn off testing
-    - "-DBUILD_TESTING=OFF"
-    - "--no-warn-unused-cli"
+    # - "--no-warn-unused-cli"

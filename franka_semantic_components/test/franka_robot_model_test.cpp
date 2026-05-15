@@ -21,6 +21,7 @@
 
 void FrankaRobotModelTest::TearDown() {
   franka_robot_model_friend.reset(nullptr);
+  state_interface_storage.clear();
 }
 
 void FrankaRobotModelTest::SetUp() {
@@ -32,16 +33,25 @@ void FrankaRobotModelTest::SetUp() {
                                                    robot_name + "/" + franka_state_interface_name);
 }
 
-TEST_F(FrankaRobotModelTest, given_franka_semantic_model_initialized_when_get_coriolis_expect_one) {
-  std::vector<std::string> interface_names = franka_robot_model_friend->get_state_interface_names();
-  hardware_interface::StateInterface franka_hw_model{robot_name, franka_model_interface_name,
-                                                     reinterpret_cast<double*>(&model_address)};
-  hardware_interface::StateInterface franka_hw_state{
-      robot_name, franka_state_interface_name, reinterpret_cast<double*>(&robot_state_address)};
+auto FrankaRobotModelTest::createLoanedStateInterfaces()
+    -> std::vector<hardware_interface::LoanedStateInterface> {
+  state_interface_storage.clear();
+  state_interface_storage.reserve(size);
+  state_interface_storage.emplace_back(std::make_shared<hardware_interface::StateInterface>(
+      robot_name, franka_state_interface_name, reinterpret_cast<double*>(&robot_state_address)));
+  state_interface_storage.emplace_back(std::make_shared<hardware_interface::StateInterface>(
+      robot_name, franka_model_interface_name, reinterpret_cast<double*>(&model_address)));
+
   std::vector<hardware_interface::LoanedStateInterface> temp_state_interfaces;
   temp_state_interfaces.reserve(size);
-  temp_state_interfaces.emplace_back(franka_hw_state);
-  temp_state_interfaces.emplace_back(franka_hw_model);
+  temp_state_interfaces.emplace_back(state_interface_storage[0]);
+  temp_state_interfaces.emplace_back(state_interface_storage[1]);
+  return temp_state_interfaces;
+}
+
+TEST_F(FrankaRobotModelTest, given_franka_semantic_model_initialized_when_get_coriolis_expect_one) {
+  std::vector<std::string> interface_names = franka_robot_model_friend->get_state_interface_names();
+  auto temp_state_interfaces = createLoanedStateInterfaces();
 
   franka_robot_model_friend->assign_loaned_state_interfaces(temp_state_interfaces);
 
@@ -55,14 +65,7 @@ TEST_F(FrankaRobotModelTest, given_franka_semantic_model_initialized_when_get_co
 
 TEST_F(FrankaRobotModelTest, validate_state_names_and_size) {
   std::vector<std::string> interface_names = franka_robot_model_friend->get_state_interface_names();
-  hardware_interface::StateInterface franka_hw_model{robot_name, franka_model_interface_name,
-                                                     reinterpret_cast<double*>(&model_address)};
-  hardware_interface::StateInterface franka_hw_state{
-      robot_name, franka_state_interface_name, reinterpret_cast<double*>(&robot_state_address)};
-  std::vector<hardware_interface::LoanedStateInterface> temp_state_interfaces;
-  temp_state_interfaces.reserve(size);
-  temp_state_interfaces.emplace_back(franka_hw_state);
-  temp_state_interfaces.emplace_back(franka_hw_model);
+  auto temp_state_interfaces = createLoanedStateInterfaces();
 
   franka_robot_model_friend->assign_loaned_state_interfaces(temp_state_interfaces);
 
@@ -81,15 +84,7 @@ TEST_F(FrankaRobotModelTest, validate_state_names_and_size) {
 
 TEST_F(FrankaRobotModelTest, given_franka_semantic_model_initialized_when_get_gravity_expect_one) {
   std::vector<std::string> interface_names = franka_robot_model_friend->get_state_interface_names();
-  hardware_interface::StateInterface franka_hw_model{robot_name, franka_model_interface_name,
-                                                     reinterpret_cast<double*>(&model_address)};
-  hardware_interface::StateInterface franka_hw_state{
-      robot_name, franka_state_interface_name, reinterpret_cast<double*>(&robot_state_address)};
-
-  std::vector<hardware_interface::LoanedStateInterface> temp_state_interfaces;
-  temp_state_interfaces.reserve(size);
-  temp_state_interfaces.emplace_back(franka_hw_state);
-  temp_state_interfaces.emplace_back(franka_hw_model);
+  auto temp_state_interfaces = createLoanedStateInterfaces();
 
   franka_robot_model_friend->assign_loaned_state_interfaces(temp_state_interfaces);
 
@@ -105,15 +100,7 @@ TEST_F(FrankaRobotModelTest, given_franka_semantic_model_initialized_when_get_gr
 
 TEST_F(FrankaRobotModelTest, given_franka_semantic_model_initialized_when_get_pose_expect_one) {
   std::vector<std::string> interface_names = franka_robot_model_friend->get_state_interface_names();
-  hardware_interface::StateInterface franka_hw_model{robot_name, franka_model_interface_name,
-                                                     reinterpret_cast<double*>(&model_address)};
-  hardware_interface::StateInterface franka_hw_state{
-      robot_name, franka_state_interface_name, reinterpret_cast<double*>(&robot_state_address)};
-
-  std::vector<hardware_interface::LoanedStateInterface> temp_state_interfaces;
-  temp_state_interfaces.reserve(size);
-  temp_state_interfaces.emplace_back(franka_hw_state);
-  temp_state_interfaces.emplace_back(franka_hw_model);
+  auto temp_state_interfaces = createLoanedStateInterfaces();
 
   franka_robot_model_friend->assign_loaned_state_interfaces(temp_state_interfaces);
 
@@ -129,15 +116,7 @@ TEST_F(FrankaRobotModelTest, given_franka_semantic_model_initialized_when_get_po
 
 TEST_F(FrankaRobotModelTest, given_franka_semantic_model_initialized_when_get_mass_expect_correct) {
   std::vector<std::string> interface_names = franka_robot_model_friend->get_state_interface_names();
-  hardware_interface::StateInterface franka_hw_model{robot_name, franka_model_interface_name,
-                                                     reinterpret_cast<double*>(&model_address)};
-  hardware_interface::StateInterface franka_hw_state{
-      robot_name, franka_state_interface_name, reinterpret_cast<double*>(&robot_state_address)};
-
-  std::vector<hardware_interface::LoanedStateInterface> temp_state_interfaces;
-  temp_state_interfaces.reserve(size);
-  temp_state_interfaces.emplace_back(franka_hw_state);
-  temp_state_interfaces.emplace_back(franka_hw_model);
+  auto temp_state_interfaces = createLoanedStateInterfaces();
   franka_robot_model_friend->assign_loaned_state_interfaces(temp_state_interfaces);
 
   std::array<double, 49> expected_mass;

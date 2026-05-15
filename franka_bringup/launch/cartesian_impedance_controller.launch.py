@@ -1,5 +1,6 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import (
     LaunchConfiguration,
@@ -8,7 +9,6 @@ from launch.substitutions import (
 )
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
-from launch.conditions import IfCondition
 
 
 def generate_launch_description():
@@ -16,6 +16,7 @@ def generate_launch_description():
     robot_ip_parameter_name = "robot_ip"
     use_arm_id_as_ns_parameter_name = "use_arm_id_as_ns"
     load_gripper_parameter_name = "load_gripper"
+    start_gripper_action_server_parameter_name = "start_gripper_action_server"
     use_fake_hardware_parameter_name = "use_fake_hardware"
     fake_sensor_commands_parameter_name = "fake_sensor_commands"
     use_rviz_parameter_name = "use_rviz"
@@ -55,7 +56,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 use_rviz_parameter_name,
-                default_value="false",
+                default_value="true",
                 description="Visualize the robot in Rviz",
             ),
             DeclareLaunchArgument(
@@ -83,7 +84,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 use_throttle_parameter_name,
-                default_value="false",
+                default_value="true",
                 description="Enable throttling of high-frequency topics.",
             ),
             DeclareLaunchArgument(
@@ -108,10 +109,30 @@ def generate_launch_description():
                     robot_ip_parameter_name: robot_ip,
                     use_arm_id_as_ns_parameter_name: use_arm_id_as_ns,
                     load_gripper_parameter_name: load_gripper,
+                    start_gripper_action_server_parameter_name: "false",
                     use_fake_hardware_parameter_name: use_fake_hardware,
                     fake_sensor_commands_parameter_name: fake_sensor_commands,
                     use_rviz_parameter_name: use_rviz,
                     publish_description_name: publish_description,
+                }.items(),
+            ),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    [
+                        PathJoinSubstitution(
+                            [
+                                FindPackageShare("franka_gripper"),
+                                "launch",
+                                "gripper_topic.launch.py",
+                            ]
+                        )
+                    ]
+                ),
+                condition=IfCondition(load_gripper),
+                launch_arguments={
+                    robot_ip_parameter_name: robot_ip,
+                    use_fake_hardware_parameter_name: use_fake_hardware,
+                    "namespace": namespace,
                 }.items(),
             ),
             IncludeLaunchDescription(

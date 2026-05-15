@@ -19,6 +19,7 @@
 #include "franka_example_controllers/gravity_compensation_example_controller.hpp"
 #include "rclcpp/rclcpp.hpp"
 
+#include "controller_interface/controller_interface_params.hpp"
 #include "hardware_interface/handle.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "rclcpp/utilities.hpp"
@@ -30,12 +31,7 @@ using hardware_interface::HW_IF_EFFORT;
 using hardware_interface::LoanedCommandInterface;
 
 void assert_val_eq(const CommandInterface& cmdintf) {
-#ifdef HW_HAS_GET_BY_REF
-  double val = 0;
-  EXPECT_TRUE(cmdintf.get_value(val));
-#else
-  const double val = cmdintf.get_value();
-#endif
+  const double val = cmdintf.get_optional().value();
   ASSERT_EQ(val, 0.0);
 }
 
@@ -64,6 +60,7 @@ class TestGravityCompensationExample : public ::testing::Test {
   CommandInterface joint_5_pos_cmd_{joint_names_[4], HW_IF_EFFORT, &joint_commands_[4]};
   CommandInterface joint_6_pos_cmd_{joint_names_[5], HW_IF_EFFORT, &joint_commands_[5]};
   CommandInterface joint_7_pos_cmd_{joint_names_[6], HW_IF_EFFORT, &joint_commands_[6]};
+  std::vector<CommandInterface::SharedPtr> command_interface_storage_;
 };
 
 void TestGravityCompensationExample::SetUpTestSuite() {
@@ -81,27 +78,28 @@ void TestGravityCompensationExample::SetUp() {
 
 void TestGravityCompensationExample::TearDown() {
   controller_.reset(nullptr);
+  command_interface_storage_.clear();
 }
 
 void TestGravityCompensationExample::SetUpController() {
-  const auto result = controller_->init(
-    "test_gravitiy_compensation_example"
-#if controller_interface_VERSION_MAJOR >= 4
-    , ros2_control_test_assets::minimal_robot_urdf      // urdf
-    , 0                                                 // cm_update_rate
-    , {}                                                // node_namespace
-    , rclcpp::NodeOptions().enable_logger_service(true) // node_options
-#endif
-  );
+  controller_interface::ControllerInterfaceParams params;
+  params.controller_name = "test_gravitiy_compensation_example";
+  params.robot_description = ros2_control_test_assets::minimal_robot_urdf;
+  params.controller_manager_update_rate = 0;
+  params.node_namespace = {};
+  params.node_options = rclcpp::NodeOptions().enable_logger_service(true);
+  const auto result = controller_->init(params);
   ASSERT_EQ(result, controller_interface::return_type::OK);
   std::vector<LoanedCommandInterface> command_ifs;
-  command_ifs.emplace_back(joint_1_pos_cmd_);
-  command_ifs.emplace_back(joint_2_pos_cmd_);
-  command_ifs.emplace_back(joint_3_pos_cmd_);
-  command_ifs.emplace_back(joint_4_pos_cmd_);
-  command_ifs.emplace_back(joint_5_pos_cmd_);
-  command_ifs.emplace_back(joint_6_pos_cmd_);
-  command_ifs.emplace_back(joint_7_pos_cmd_);
+  command_interface_storage_.clear();
+  command_interface_storage_.reserve(joint_commands_.size());
+  for (auto i = 0U; i < joint_commands_.size(); ++i) {
+    command_interface_storage_.emplace_back(
+        std::make_shared<CommandInterface>(joint_names_[i], HW_IF_EFFORT, &joint_commands_[i]));
+  }
+  for (const auto& command_interface : command_interface_storage_) {
+    command_ifs.emplace_back(command_interface);
+  }
 
   controller_->get_node()->declare_parameter("joints", std::vector<std::string>{});
 

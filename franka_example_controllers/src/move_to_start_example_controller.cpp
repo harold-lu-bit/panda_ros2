@@ -141,8 +141,8 @@ void MoveToStartExampleController::updateJointStates() {
     assert(position_interface.get_interface_name() == "position");
     assert(velocity_interface.get_interface_name() == "velocity");
 
-    q_(i) = position_interface.get_value();
-    dq_(i) = velocity_interface.get_value();
+    q_(i) = position_interface.get_optional().value();
+    dq_(i) = velocity_interface.get_optional().value();
   }
 }
 }  // namespace franka_example_controllers

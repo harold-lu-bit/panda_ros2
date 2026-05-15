@@ -1,44 +1,26 @@
-FROM ros:jazzy
+FROM osrf/ros:kilted-desktop
 
-ARG DEBIAN_FRONTEND=noninteractive
+# setup user and timezone
+ARG USER_NAME
 ARG USER_UID
 ARG USER_GID
-ARG USERNAME
-
-# Install essential packages and ROS development tools
-RUN apt-get update && \
-  apt-get install -y --no-install-recommends \
-    locales \
+ARG TZ
+RUN --mount=type=secret,id=sudo_password,target=/tmp/sudo_password.secret \
+  deluser --remove-home ubuntu \
+  && echo ${TZ} | tee /etc/timezone \
+  && ln -sf /usr/share/zoneinfo/${TZ} /etc/localtime \
+  && apt-get update && apt-get install -y \
+    tzdata \
     bash-completion \
-    git \
-    openssh-client \
-    python3-colcon-argcomplete \
-    python3-colcon-common-extensions \
-    sudo \
-    vim \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* \
-  && sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen \
-  && locale-gen
-ENV LANG=en_US.UTF-8 \
-  LANGUAGE=en_US:en \
-  LC_ALL=en_US.UTF-8
-
-# Setup user configuration
-RUN --mount=type=secret,id=sudo_password,target=/tmp/sudo_password.secret \
-  deluser --remove-home ubuntu && groupadd --gid ${USER_GID} ${USERNAME} \
-  && useradd --uid ${USER_UID} --gid ${USER_GID} --create-home --shell /bin/bash ${USERNAME} \
-  && echo "${USERNAME}:$(cat /tmp/sudo_password.secret)" | chpasswd \
-  && usermod -aG sudo,adm,dialout,cdrom,floppy,sudo,audio,dip,video,plugdev ${USERNAME} \
-  && echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc \
-  && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/${USERNAME}/.bashrc
-
-# switch DDS implementation to zenoh
-ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp
-RUN apt-get update \
-  && apt-get install -y ros-${ROS_DISTRO}-rmw-zenoh-cpp \
-  && apt-get clean \
-  && rm -rf /var/lib/apt/lists/*
+  && groupadd --gid ${USER_GID} ${USER_NAME} \
+  && useradd --uid ${USER_UID} --gid ${USER_GID} --create-home --shell /bin/bash ${USER_NAME} \
+  && echo "${USER_NAME}:$(cat /tmp/sudo_password.secret)" | chpasswd \
+  && usermod -aG sudo ${USER_NAME} \
+  && echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /home/${USER_NAME}/.bashrc \
+  && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/${USER_NAME}/.bashrc \
+  && echo '[ -f /workspace/ros2_ws/install/setup.bash ] && source /workspace/ros2_ws/install/setup.bash' >> ~/.bashrc 
 
 # Dependencies for panda_ros2
 RUN apt-get update \
@@ -81,22 +63,43 @@ RUN apt-get update \
   && cpack -G DEB \
   && dpkg -i libfranka*.deb
 
-# topic-tools for throttle topic rate
+# switch DDS implementation to zenoh
+ENV RMW_IMPLEMENTATION=rmw_zenoh_cpp
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
-    ros-jazzy-topic-tools \
+  && apt-get install -y ros-${ROS_DISTRO}-rmw-zenoh-cpp \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir /workspace && chown -R ${USERNAME}:${USERNAME} /workspace
+# topic-tools for throttle topic rate and other handy tools
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-topic-tools \
+    vim \
+    tmux \
+    ripgrep \
+    clang-format \
+    iputils-ping \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
 
-# entry point to set xauthority for xwayland
-COPY --chmod=755 inin_entrypoint.sh /inin_entrypoint.sh
-
-USER ${USERNAME}
-
+# create workspace folder
 RUN mkdir -p /workspace/ros2_ws/src \
-  && mkdir ~/.vscode-server \
+  && chown -R ${USER_NAME}:${USER_NAME} /workspace
+
+################ non-root user ################
+
+USER ${USER_NAME}
+
+# xauth with wayland on host system
+RUN echo 'AUTH_FILE=$(find /tmp/runtime_dir -maxdepth 2 -type f \( -name ".mutter-Xwaylandauth.*" -o -name "*Xauthority*" \) 2>/dev/null | head -n 1); [ -n "$AUTH_FILE" ] && export XAUTHORITY="$AUTH_FILE"' >> ~/.bashrc
+
+# handy tools
+RUN git clone https://github.com/magicmonty/bash-git-prompt.git ~/.bash-git-prompt --depth=1 \
+  && echo "GIT_PROMPT_ONLY_IN_REPO=1; source ~/.bash-git-prompt/gitprompt.sh" >> ~/.bashrc \
+  && echo "[ -f /workspace/ros2_ws/install/setup.bash ] && source /workspace/ros2_ws/install/setup.bash" >> ~/.bashrc
+
+# for persitent cache
+RUN mkdir ~/.vscode-server \
   && mkdir ~/.cache
   
 WORKDIR /workspace/ros2_ws

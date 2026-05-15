@@ -28,9 +28,22 @@ foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
 endforeach()
 
 add_library(franka_semantic_components SHARED src/franka_robot_state.cpp src/franka_robot_model.cpp)
-target_include_directories(franka_semantic_components PRIVATE include)
-target_link_libraries(franka_semantic_components Franka::Franka)
-ament_target_dependencies(franka_semantic_components ${THIS_PACKAGE_INCLUDE_DEPENDS})
+target_include_directories(franka_semantic_components
+  PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+  ${franka_hardware_INCLUDE_DIRS}
+)
+target_link_libraries(franka_semantic_components
+  PUBLIC
+  Franka::Franka
+  ${franka_msgs_TARGETS}
+  controller_interface::controller_interface
+  hardware_interface::hardware_interface
+  hardware_interface::mock_components
+  rclcpp_lifecycle::rclcpp_lifecycle
+  urdf::urdf
+)
 
 install(TARGETS franka_semantic_components DESTINATION lib)
 install(DIRECTORY include/ DESTINATION include)
@@ -63,24 +76,22 @@ if(BUILD_TESTING)
   target_include_directories(test_franka_robot_state PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
   target_link_libraries(test_franka_robot_state
     franka_semantic_components
-  )
-  ament_target_dependencies(test_franka_robot_state
-    controller_interface
-    hardware_interface
-    franka_msgs
-    Franka
+    Franka::Franka
+    ${franka_msgs_TARGETS}
+    controller_interface::controller_interface
+    hardware_interface::hardware_interface
+    hardware_interface::mock_components
   )
   ament_add_gmock(test_franka_robot_model test/franka_robot_model_test.cpp)
   target_include_directories(test_franka_robot_model PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
   target_link_libraries(test_franka_robot_model
     franka_semantic_components
-  )
-  ament_target_dependencies(test_franka_robot_model
-    controller_interface
-    hardware_interface
-    franka_msgs
-    Franka
+    Franka::Franka
+    ${franka_msgs_TARGETS}
+    controller_interface::controller_interface
+    hardware_interface::hardware_interface
+    hardware_interface::mock_components
   )
 endif()
 

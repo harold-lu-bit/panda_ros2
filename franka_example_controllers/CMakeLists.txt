@@ -23,7 +23,7 @@ find_package(hardware_interface REQUIRED)
 find_package(franka_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Franka REQUIRED)
-find_package(franka_semantic_components)
+find_package(franka_semantic_components REQUIRED)
 find_package(generate_parameter_library REQUIRED)
 
 add_library(
@@ -39,20 +39,24 @@ target_include_directories(
         PUBLIC
         include
         ${EIGEN3_INCLUDE_DIRS}
+        ${franka_semantic_components_INCLUDE_DIRS}
 )
-ament_target_dependencies(
+target_link_libraries(
         ${PROJECT_NAME}
-        controller_interface
-        hardware_interface
-        pluginlib
-        rclcpp
-        rclcpp_lifecycle
-        franka_semantic_components
+        PUBLIC
+        Franka::Franka
+        ${franka_semantic_components_LIBRARIES}
+        controller_interface::controller_interface
+        hardware_interface::hardware_interface
+        hardware_interface::mock_components
+        pluginlib::pluginlib
+        rclcpp::rclcpp
+        rclcpp_lifecycle::rclcpp_lifecycle
 )
 
 generate_parameter_library(franka_example_controllers_parameters src/model_example_controller_parameters.yaml)
 
-target_link_libraries(${PROJECT_NAME} franka_example_controllers_parameters Franka::Franka)
+target_link_libraries(${PROJECT_NAME} PUBLIC franka_example_controllers_parameters)
 
 if(${hardware_interface_VERSION} VERSION_GREATER_EQUAL "4.20")
     target_compile_definitions(${PROJECT_NAME} PRIVATE HW_HAS_SET_NODISCARD)
@@ -98,24 +102,30 @@ if(BUILD_TESTING)
         test/test_load_gravity_compensation_controller.cpp
     )
     target_include_directories(${PROJECT_NAME}_test PRIVATE include)
-    ament_target_dependencies(${PROJECT_NAME}_test
-        controller_manager
-        ros2_control_test_assets
+    target_link_libraries(${PROJECT_NAME}_test
+        controller_manager::controller_manager
+        controller_manager::controller_manager_parameters
+        ros2_control_test_assets::ros2_control_test_assets
     )
 
     ament_add_gmock(${PROJECT_NAME}_test_load_move_to_start
         test/test_load_move_to_start_example_controller.cpp)
     target_include_directories(${PROJECT_NAME}_test_load_move_to_start PRIVATE include)
-    ament_target_dependencies(${PROJECT_NAME}_test_load_move_to_start
-        controller_manager
-        ros2_control_test_assets
+    target_link_libraries(${PROJECT_NAME}_test_load_move_to_start
+        controller_manager::controller_manager
+        controller_manager::controller_manager_parameters
+        ros2_control_test_assets::ros2_control_test_assets
     )
 
 
     ament_add_gmock(${PROJECT_NAME}_gravity_test test/test_gravity_compensation_example.cpp)
     target_include_directories(${PROJECT_NAME}_gravity_test PRIVATE include)
-    target_link_libraries(${PROJECT_NAME}_gravity_test ${PROJECT_NAME})
-    ament_target_dependencies(${PROJECT_NAME}_gravity_test controller_manager ros2_control_test_assets)
+    target_link_libraries(${PROJECT_NAME}_gravity_test
+        ${PROJECT_NAME}
+        controller_manager::controller_manager
+        controller_manager::controller_manager_parameters
+        ros2_control_test_assets::ros2_control_test_assets
+    )
     target_compile_definitions(
         ${PROJECT_NAME}_gravity_test
         PUBLIC controller_interface_VERSION_MAJOR=${controller_interface_VERSION_MAJOR}
@@ -126,8 +136,12 @@ if(BUILD_TESTING)
 
     ament_add_gmock(${PROJECT_NAME}_move_to_start_test test/test_move_to_start_example_controller.cpp)
     target_include_directories(${PROJECT_NAME}_move_to_start_test PRIVATE include)
-    target_link_libraries(${PROJECT_NAME}_move_to_start_test ${PROJECT_NAME})
-    ament_target_dependencies(${PROJECT_NAME}_move_to_start_test controller_manager ros2_control_test_assets)
+    target_link_libraries(${PROJECT_NAME}_move_to_start_test
+        ${PROJECT_NAME}
+        controller_manager::controller_manager
+        controller_manager::controller_manager_parameters
+        ros2_control_test_assets::ros2_control_test_assets
+    )
     target_compile_definitions(
         ${PROJECT_NAME}_move_to_start_test
         PUBLIC controller_interface_VERSION_MAJOR=${controller_interface_VERSION_MAJOR}
@@ -155,5 +169,6 @@ ament_export_dependencies(
         rclcpp
         rclcpp_lifecycle
         hardware_interface
+        franka_semantic_components
 )
 ament_package()
